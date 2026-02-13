@@ -1,22 +1,10 @@
--- TSB Kerbzinn Hub V11.1 - 2026 (Improved Version)
--- Improvements:
--- 1. Optimized loops: Consolidated multiple Heartbeat/Stepped connections into fewer, more efficient ones.
--- 2. Added proper player added/removed handling for ESP.
--- 3. Improved AutoParry: Added basic attack detection (checks for animations or proximity with velocity).
--- 4. KillAura: Added rotation to face enemy before attacking, and reset hitbox sizes when disabled.
--- 5. InfiniteStamina: Assumed stamina is tied to a local value; added a check for a potential Stamina attribute.
--- 6. AntiRagdoll: More robust by also preventing ragdoll states if applicable.
--- 7. Techs: Added toggles to prevent spamming; only execute if not in cooldown or animation.
--- 8. AutoFarm: Added safety to avoid bans (e.g., random delays, checks for anti-cheat).
--- 9. General: Cleaner code structure, error handling, and UI enhancements.
--- 10. Added a credits section and unload function.
 
 local OrionLib = loadstring(game:HttpGet('https://raw.githubusercontent.com/shlexware/Orion/main/source'))()
 local Window = OrionLib:MakeWindow({
-    Name = "TSB Kerbzinn Hub V11.1 - 2026",
+    Name = "NamelessHub v1",
     HidePremium = false,
     SaveConfig = true,
-    ConfigFolder = "TSBKerbzinn2026",
+    ConfigFolder = "The Best",
     IntroEnabled = true,
     IntroText = "Carregando o hub mais OP de 2026... (Versão Melhorada)"
 })
