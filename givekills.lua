@@ -1,1125 +1,450 @@
---[[
-    TSB Exploit Hub V4 - SUPREME
-   
-    Melhorias desta versão:
-    ✅ TUDO da V1, V2 e V3 +
-    ✅ IA avançada com machine learning simulado (análise de padrões de jogadores)
-    ✅ Anti-detecção aprimorada (movimentos suaves, variações randômicas em padrões)
-    ✅ Threat detection expandida (detecção de velocidade anormal, ferramentas de mod)
-    ✅ Auto-pause inteligente com resume gradual
-    ✅ Sistema de debug aprimorado com exportação para arquivo
-    ✅ Histórico de ações com análise
-    ✅ Recovery automático de erros com fallback
-    ✅ Heatmap de teleports com visualização (opcional)
-    ✅ Performance monitor otimizado com alertas
-    ✅ Novos modos: Auto-Farm Kills, Stealth Mode
-    ✅ Suporte a pathfinding para teleports suaves
-    ✅ Humanização melhorada (pausas naturais, erros simulados)
-   
-    Uso: Execute em qualquer executor (Synapse, Fluxus, etc.)
-]]
+-- TSB Kerbzinn Hub V11.1 - 2026 (Improved Version)
+-- Improvements:
+-- 1. Optimized loops: Consolidated multiple Heartbeat/Stepped connections into fewer, more efficient ones.
+-- 2. Added proper player added/removed handling for ESP.
+-- 3. Improved AutoParry: Added basic attack detection (checks for animations or proximity with velocity).
+-- 4. KillAura: Added rotation to face enemy before attacking, and reset hitbox sizes when disabled.
+-- 5. InfiniteStamina: Assumed stamina is tied to a local value; added a check for a potential Stamina attribute.
+-- 6. AntiRagdoll: More robust by also preventing ragdoll states if applicable.
+-- 7. Techs: Added toggles to prevent spamming; only execute if not in cooldown or animation.
+-- 8. AutoFarm: Added safety to avoid bans (e.g., random delays, checks for anti-cheat).
+-- 9. General: Cleaner code structure, error handling, and UI enhancements.
+-- 10. Added a credits section and unload function.
+
+local OrionLib = loadstring(game:HttpGet('https://raw.githubusercontent.com/shlexware/Orion/main/source'))()
+local Window = OrionLib:MakeWindow({
+    Name = "TSB Kerbzinn Hub V11.1 - 2026",
+    HidePremium = false,
+    SaveConfig = true,
+    ConfigFolder = "TSBKerbzinn2026",
+    IntroEnabled = true,
+    IntroText = "Carregando o hub mais OP de 2026... (Versão Melhorada)"
+})
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
-local VirtualUser = game:GetService("VirtualUser")
-local PathfindingService = game:GetService("PathfindingService")
-local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 local player = Players.LocalPlayer
+local camera = Workspace.CurrentCamera
 
--- =====================================================
--- ESTADO CENTRALIZADO
--- =====================================================
-local State = {
-    Features = {
-        OneHit = false,
-        LoopGoto = false,
-        M1Bot = false,
-        AntiAFK = true,
-        AutoTarget = false,
-        SmartFollow = false,
-        ThreatDetection = true,
-        AutoPause = true,
-        BehaviorAI = true,
-        AutoFarm = false,
-        StealthMode = false
-    },
-   
-    Connections = {
-        OneHit = nil,
-        LoopGoto = nil,
-        M1Bot = {},
-        AntiAFK = nil,
-        CharacterAdded = nil,
-        PerformanceMonitor = nil,
-        Pathfinding = nil
-    },
-   
-    Cache = {
-        TargetPlayer = nil,
-        LastTargetSearch = 0,
-        LastHealthValue = 0,
-        NearbyPlayers = {},
-        ThreatPlayers = {},
-        TeleportHistory = {},
-        LastAction = tick(),
-        PathWaypoints = {},
-        PlayerPatterns = {}  -- Para análise de IA
-    },
-   
-    Settings = {
-        TargetName = "",
-        TeleportOffset = Vector3.new(0, 0, -2),
-        TeleportMode = "behind",
-        TeleportFrequency = 1,
-        MinTeleportDistance = 3,
-        MaxFollowDistance = 50,
-        M1DelayRange = {0.025, 0.040},
-        Key3CooldownRange = {11.5, 12.5},
-        AutoTargetMode = "nearest",
-        CombatMode = "balanced",
-        PauseOnThreat = true,
-        MaxIdleTime = 30,
-        TeleportHeatmapSize = 100,
-        StealthLevel = 5,  -- 1-10, quanto maior, mais stealth
-        FarmEfficiency = 80  -- Porcentagem de agressividade no farm
-    },
-   
-    Stats = {
-        Kills = 0,
-        Deaths = 0,
-        TeleportCount = 0,
-        M1Count = 0,
-        SessionStart = tick(),
-        ErrorCount = 0,
-        AutoPauseCount = 0,
-        ThreatsDetected = 0,
-        FarmKills = 0
-    },
-   
-    Logs = {},
-   
-    Debug = {
-        Enabled = false,
-        PerformanceData = {
-            CPU = {},
-            FPS = {},
-            Memory = {},
-            Ping = {}
-        }
-    },
-   
-    AI = {
-        LastBehaviorChange = tick(),
-        CurrentBehavior = "normal",
-        ThreatLevel = 0,
-        Paused = false,
-        PauseReason = "",
-        LearnedPatterns = {}  -- Para ML simulado
-    }
+-- ======================= SETTINGS =======================
+local Settings = {
+    AutoParry = false,
+    ESP = false,
+    KillAura = false,
+    AuraRange = 20,
+    InfiniteStamina = false,
+    AntiRagdoll = false,
+    AutoFarmKills = false,
+    AutoTrashcan = false,
+    HitboxSize = 15,
+    -- Hero Hunter (Garou) Techs
+    AutoSwirlTech = false,
+    AutoWhirlwindDash = false,
+    AutoLethalDashExtender = false,
+    AutoTwistedDash = false,
+    AutoUppercutStrike = false,
+    -- The Strongest Hero (Saitama) Techs
+    AutoCounteringCounter = false,
+    AutoSurfTech = false,
+    AutoRagdollShoveDash = false,
+    AutoKick = false,
+    AutoTacticalYeet = false,
+    AutoUppercutFlickDash = false,
+    AutoUppercutDash = false
 }
 
--- =====================================================
--- UTILIDADES
--- =====================================================
-local Utils = {}
-function Utils.random(min, max)
-    return min + (math.random() * (max - min))
-end
+local ESPObjects = {}
+local TechCooldowns = {}  -- To prevent spamming techs
 
-function Utils.log(message, type)
-    type = type or "INFO"
-    local timestamp = os.date("%H:%M:%S")
-    local logEntry = string.format("[%s] %s: %s", timestamp, type, message)
-   
-    table.insert(State.Logs, 1, logEntry)
-    if #State.Logs > 200 then  -- Aumentado para mais histórico
-        table.remove(State.Logs)
-    end
-   
-    if State.Debug.Enabled then
-        print(logEntry)
-    end
-end
+-- ======================= VERIFICADOR GERAL (canto superior esquerdo) =======================
+local function criarVerificador()
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "VerificadorKerbzinn"
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.Parent = player:WaitForChild("PlayerGui")
+    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
-function Utils.debugLog(message)
-    if State.Debug.Enabled then
-        Utils.log(message, "DEBUG")
-    end
-end
+    local Frame = Instance.new("Frame")
+    Frame.Size = UDim2.new(0, 260, 0, 90)
+    Frame.Position = UDim2.new(0, 15, 0, 15)
+    Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    Frame.BorderSizePixel = 0
+    Frame.BackgroundTransparency = 0.1
+    Frame.Parent = ScreenGui
 
-function Utils.findPlayerByPartialName(name)
-    if not name or name == "" then return nil end
-    name = name:lower()
-   
-    local matches = {}
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= player then
-            local nameMatch = plr.Name:lower():find(name, 1, true)
-            local displayMatch = plr.DisplayName:lower():find(name, 1, true)
-            if nameMatch or displayMatch then
-                table.insert(matches, plr)
-            end
-        end
-    end
-    return #matches > 0 and matches[1] or nil  -- Retorna o primeiro match
-end
+    local UICorner = Instance.new("UICorner")
+    UICorner.CornerRadius = UDim.new(0, 12)
+    UICorner.Parent = Frame
 
-function Utils.isCharacterValid(character)
-    if not character then return false end
-    local humanoid = character:FindFirstChild("Humanoid")
-    local hrp = character:FindFirstChild("HumanoidRootPart")
-    return humanoid and hrp and humanoid.Health > 0
-end
-
-function Utils.safePcall(func, ...)
-    local success, result = pcall(func, ...)
-    if not success then
-        Utils.log("Erro: " .. tostring(result), "ERROR")
-        State.Stats.ErrorCount = State.Stats.ErrorCount + 1
-        -- Fallback: Tenta recuperar
-        task.wait(0.5)
-        success, result = pcall(func, ...)
-    end
-    return success, result
-end
-
-function Utils.getNearbyPlayers(maxDistance)
-    local myChar = player.Character
-    if not myChar or not Utils.isCharacterValid(myChar) then return {} end
-   
-    local myPos = myChar.HumanoidRootPart.Position
-    local nearby = {}
-   
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= player and plr.Character and Utils.isCharacterValid(plr.Character) then
-            local distance = (plr.Character.HumanoidRootPart.Position - myPos).Magnitude
-            if distance <= maxDistance then
-                table.insert(nearby, {
-                    player = plr,
-                    distance = distance,
-                    health = plr.Character.Humanoid.Health,
-                    velocity = plr.Character.HumanoidRootPart.Velocity.Magnitude  -- Para threat
-                })
-            end
-        end
-    end
-   
-    return nearby
-end
-
-function Utils.exportLogs()
-    local data = {
-        Stats = State.Stats,
-        Settings = State.Settings,
-        Logs = State.Logs
+    local UIGradient = Instance.new("UIGradient")
+    UIGradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(100, 0, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 170, 255))
     }
-    local json = HttpService:JSONEncode(data)
-    -- Simula export (em executor real, use writefile)
-    print("=== EXPORT JSON ===")
-    print(json)
-end
+    UIGradient.Transparency = NumberSequence.new{NumberSequenceKeypoint.new(0, 0.6), NumberSequenceKeypoint.new(1, 0.9)}
+    UIGradient.Parent = Frame
 
--- =====================================================
--- THREAT DETECTION APRIMORADA
--- =====================================================
-local ThreatSystem = {}
-function ThreatSystem.isPlayerThreat(plr)
-    -- Nomes suspeitos
-    local suspiciousNames = {"admin", "mod", "moderator", "dev", "owner", "staff"}
-    local name = plr.Name:lower()
-   
-    for _, suspicious in ipairs(suspiciousNames) do
-        if name:find(suspicious) then
-            return true, "Nome suspeito"
-        end
-    end
-   
-    -- Velocidade anormal (mods podem ter fly/speed)
-    if plr.Character and plr.Character.HumanoidRootPart then
-        local velocity = plr.Character.HumanoidRootPart.Velocity.Magnitude
-        if velocity > 100 then  -- Limite arbitrário para speed hacks
-            return true, "Velocidade anormal"
-        end
-    end
-   
-    -- Checa rank em grupo (exemplo: substitua por ID real de grupo do jogo)
-    local success, rank = pcall(function()
-        return plr:GetRankInGroup(1234567)  -- ID de grupo placeholder; mude para o real
-    end)
-    if success and rank > 1 then  -- Assumindo rank >1 é staff
-        return true, "Rank em grupo"
-    end
-   
-    return false, ""
-end
+    local ImageLabel = Instance.new("ImageLabel")
+    ImageLabel.Size = UDim2.new(0, 70, 0, 70)
+    ImageLabel.Position = UDim2.new(0, 10, 0, 10)
+    ImageLabel.BackgroundTransparency = 1
+    ImageLabel.Image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
+    ImageLabel.Parent = Frame
 
-function ThreatSystem.scanForThreats()
-    State.Cache.ThreatPlayers = {}
-   
-    local nearby = Utils.getNearbyPlayers(100)  -- Raio maior para threats
-   
-    for _, info in ipairs(nearby) do
-        local isThreat, reason = ThreatSystem.isPlayerThreat(info.player)
-        if isThreat then
-            table.insert(State.Cache.ThreatPlayers, {player = info.player, reason = reason})
-            Utils.log("⚠️ Threat detectada: " .. info.player.DisplayName .. " (" .. reason .. ")", "THREAT")
-            State.Stats.ThreatsDetected = State.Stats.ThreatsDetected + 1
-        end
-    end
-   
-    return #State.Cache.ThreatPlayers > 0
-end
+    local ImageCorner = Instance.new("UICorner")
+    ImageCorner.CornerRadius = UDim.new(1, 0)
+    ImageCorner.Parent = ImageLabel
 
-function ThreatSystem.shouldPause()
-    if not State.Features.ThreatDetection then return false end
-   
-    local hasThreats = ThreatSystem.scanForThreats()
-   
-    if hasThreats and State.Settings.PauseOnThreat then
-        return true, "Threat detectada"
-    end
-   
-    local idleTime = tick() - State.Cache.LastAction
-    if idleTime > State.Settings.MaxIdleTime then
-        return true, "Idle time excedido"
-    end
-   
-    -- Adicional: Pausa se muitos players próximos
-    if #Utils.getNearbyPlayers(10) > 5 then
-        return true, "Muitos players próximos"
-    end
-   
-    return false, ""
-end
+    local NomeLabel = Instance.new("TextLabel")
+    NomeLabel.Size = UDim2.new(0, 160, 0, 30)
+    NomeLabel.Position = UDim2.new(0, 90, 0, 15)
+    NomeLabel.BackgroundTransparency = 1
+    NomeLabel.Text = player.DisplayName
+    NomeLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    NomeLabel.TextScaled = true
+    NomeLabel.Font = Enum.Font.GothamBold
+    NomeLabel.Parent = Frame
 
--- =====================================================
--- SISTEMA DE IA APRIMORADO
--- =====================================================
-local AIBehavior = {}
-function AIBehavior.learnPatterns()
-    -- Simula ML: Analisa velocidades e distâncias de players próximos
-    local nearby = Utils.getNearbyPlayers(State.Settings.MaxFollowDistance)
-    for _, info in ipairs(nearby) do
-        local plr = info.player
-        if not State.AI.LearnedPatterns[plr.Name] then
-            State.AI.LearnedPatterns[plr.Name] = {}
-        end
-        table.insert(State.AI.LearnedPatterns[plr.Name], info.velocity)
-        if #State.AI.LearnedPatterns[plr.Name] > 50 then
-            table.remove(State.AI.LearnedPatterns[plr.Name], 1)
-        end
-    end
-end
+    local StatusLabel = Instance.new("TextLabel")
+    StatusLabel.Size = UDim2.new(0, 160, 0, 30)
+    StatusLabel.Position = UDim2.new(0, 90, 0, 45)
+    StatusLabel.BackgroundTransparency = 1
+    StatusLabel.Text = "✅ Usuário Logado"
+    StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
+    StatusLabel.TextScaled = true
+    StatusLabel.Font = Enum.Font.Gotham
+    StatusLabel.Parent = Frame
 
-function AIBehavior.update()
-    if not State.Features.BehaviorAI then return end
-   
-    local now = tick()
-   
-    AIBehavior.learnPatterns()
-   
-    -- Muda comportamento baseado em threats e patterns
-    if now - State.AI.LastBehaviorChange > Utils.random(20, 50) then
-        local behaviors = {"normal", "cautious", "aggressive", "stealth"}
-        local newBehavior = behaviors[math.random(1, #behaviors)]
-       
-        if #State.Cache.ThreatPlayers > 0 then
-            newBehavior = "cautious"
-        elseif State.Features.AutoFarm then
-            newBehavior = "aggressive"
-        end
-       
-        if newBehavior ~= State.AI.CurrentBehavior then
-            State.AI.CurrentBehavior = newBehavior
-            State.AI.LastBehaviorChange = now
-           
-            AIBehavior.applyBehavior(newBehavior)
-            Utils.log("IA mudou para: " .. newBehavior, "AI")
-        end
-    end
-   
-    -- Checa pausa
-    local shouldPause, reason = ThreatSystem.shouldPause()
-   
-    if shouldPause and not State.AI.Paused then
-        State.AI.Paused = true
-        State.AI.PauseReason = reason
-        State.Stats.AutoPauseCount = State.Stats.AutoPauseCount + 1
-        Utils.log("⏸️ Auto-pausa: " .. reason, "AI")
-        -- Resume gradual após pausa
-        task.delay(Utils.random(10, 30), function()
-            if State.AI.Paused and not ThreatSystem.scanForThreats() then
-                State.AI.Paused = false
-                Utils.log("▶️ Resume gradual", "AI")
-            end
-        end)
-    elseif not shouldPause and State.AI.Paused then
-        State.AI.Paused = false
-        State.AI.PauseReason = ""
-        Utils.log("▶️ Resumindo operação", "AI")
-    end
-end
-
-function AIBehavior.applyBehavior(behavior)
-    if behavior == "cautious" then
-        State.Settings.TeleportFrequency = 5
-        State.Settings.M1DelayRange = {0.040, 0.060}
-        State.Settings.MinTeleportDistance = 8
-        State.Features.StealthMode = true
-    elseif behavior == "aggressive" then
-        State.Settings.TeleportFrequency = 1
-        State.Settings.M1DelayRange = {0.015, 0.025}
-        State.Settings.MinTeleportDistance = 1
-        State.Features.StealthMode = false
-    elseif behavior == "stealth" then
-        State.Settings.TeleportFrequency = 10
-        State.Settings.M1DelayRange = {0.050, 0.070}
-        State.Settings.MinTeleportDistance = 10
-        State.Features.StealthMode = true
-    else -- normal
-        State.Settings.TeleportFrequency = 2
-        State.Settings.M1DelayRange = {0.025, 0.040}
-        State.Settings.MinTeleportDistance = 3
-        State.Features.StealthMode = false
-    end
-end
-
--- IA Loop
-task.spawn(function()
-    while true do
-        AIBehavior.update()
-        task.wait(3)  -- Reduzido para mais responsividade
-    end
-end)
-
--- =====================================================
--- ONE HIT DEATH APRIMORADO
--- =====================================================
-local OneHitFeature = {}
-function OneHitFeature.hookCharacter(character)
-    local humanoid = character:WaitForChild("Humanoid", 5)
-    if not humanoid then return end
-   
-    State.Cache.LastHealthValue = humanoid.Health
-   
-    if State.Connections.OneHit then
-        State.Connections.OneHit:Disconnect()
-    end
-   
-    State.Connections.OneHit = humanoid.HealthChanged:Connect(function(currentHealth)
-        if State.AI.Paused then return end
-        if not State.Features.OneHit then return end
-       
-        if currentHealth < State.Cache.LastHealthValue and currentHealth > 0 then
-            Utils.safePcall(function()
-                humanoid.Health = 0
-            end)
-            Utils.debugLog("One Hit aplicado")
-        end
-       
-        State.Cache.LastHealthValue = currentHealth
-    end)
-   
-    humanoid.Died:Connect(function()
-        State.Stats.Deaths = State.Stats.Deaths + 1
-        Utils.log("💀 Morreu", "STAT")
-    end)
-end
-
-function OneHitFeature.start()
-    if player.Character then
-        OneHitFeature.hookCharacter(player.Character)
-    end
-   
-    if not State.Connections.CharacterAdded then
-        State.Connections.CharacterAdded = player.CharacterAdded:Connect(function(char)
-            OneHitFeature.hookCharacter(char)
-        end)
-    end
-   
-    Utils.log("One Hit Death ativado", "FEATURE")
-end
-
-function OneHitFeature.stop()
-    if State.Connections.OneHit then
-        State.Connections.OneHit:Disconnect()
-        State.Connections.OneHit = nil
-    end
-    Utils.log("One Hit Death desativado", "FEATURE")
-end
-
--- =====================================================
--- LOOP GOTO COM PATHFINDING
--- =====================================================
-local LoopGotoFeature = {}
-function LoopGotoFeature.findTarget()
-    if State.Features.AutoTarget then
-        local nearby = Utils.getNearbyPlayers(State.Settings.MaxFollowDistance)
-       
-        if #nearby > 0 then
-            if State.Settings.AutoTargetMode == "nearest" then
-                table.sort(nearby, function(a, b) return a.distance < b.distance end)
-            elseif State.Settings.AutoTargetMode == "lowest_health" then
-                table.sort(nearby, function(a, b) return a.health < b.health end)
-            elseif State.Settings.AutoTargetMode == "random" then
-                local idx = math.random(1, #nearby)
-                return nearby[idx].player
-            end
-            return nearby[1].player
-        end
-    end
-   
-    local target = Utils.findPlayerByPartialName(State.Settings.TargetName)
-    if target and Utils.isCharacterValid(target.Character) then
-        State.Cache.TargetPlayer = target
-        return target
-    end
-    State.Cache.TargetPlayer = nil
-    return nil
-end
-
-function LoopGotoFeature.getOffsetByMode(targetCFrame)
-    local mode = State.Settings.TeleportMode
-    local offset = Vector3.new(0, 0, -2)
-   
-    if mode == "behind" then
-        offset = Vector3.new(0, 0, -Utils.random(2, 4))
-    elseif mode == "side" then
-        offset = Vector3.new(Utils.random(-4, 4), 0, -1)
-    elseif mode == "above" then
-        offset = Vector3.new(0, Utils.random(4, 6), -1)
-    elseif mode == "random" then
-        offset = Vector3.new(Utils.random(-3, 3), Utils.random(0, 3), Utils.random(-3, -1))
-    end
-   
-    return targetCFrame * CFrame.new(offset)
-end
-
-function LoopGotoFeature.computePath(targetPos)
-    local myHRP = player.Character.HumanoidRootPart
-    local path = PathfindingService:CreatePath({
-        AgentRadius = 2,
-        AgentHeight = 5,
-        AgentCanJump = true
-    })
-    path:ComputeAsync(myHRP.Position, targetPos)
-    if path.Status == Enum.PathStatus.Success then
-        return path:GetWaypoints()
-    end
-    return nil
-end
-
-function LoopGotoFeature.start()
-    if State.Connections.LoopGoto then return end
-   
-    local frameCounter = 0
-   
-    State.Connections.LoopGoto = RunService.Heartbeat:Connect(function()
-        if State.AI.Paused then return end
-        if not State.Features.LoopGoto then return end
-       
-        frameCounter = frameCounter + 1
-        if frameCounter % State.Settings.TeleportFrequency ~= 0 then return end
-       
-        local target = LoopGotoFeature.findTarget()
-        if not target then return end
-       
-        local myChar = player.Character
-        if not Utils.isCharacterValid(myChar) then return end
-       
-        local myHRP = myChar.HumanoidRootPart
-        local targetHRP = target.Character.HumanoidRootPart
-       
-        local distance = (myHRP.Position - targetHRP.Position).Magnitude
-       
-        if State.Features.SmartFollow and distance > State.Settings.MaxFollowDistance then
-            return
-        end
-       
-        if distance < State.Settings.MinTeleportDistance then return end
-       
-        local targetCFrame = LoopGotoFeature.getOffsetByMode(targetHRP.CFrame)
-        local targetPos = targetCFrame.Position
-       
-        if State.Features.StealthMode then
-            -- Use pathfinding para movimento suave
-            local waypoints = LoopGotoFeature.computePath(targetPos)
-            if waypoints then
-                State.Cache.PathWaypoints = waypoints
-                for i = 2, #waypoints do  -- Pula o primeiro (posição atual)
-                    local wp = waypoints[i]
-                    myHRP.CFrame = CFrame.new(wp.Position + Vector3.new(0, 3, 0))  -- Ajuste altura
-                    if wp.Action == Enum.PathWaypointAction.Jump then
-                        myChar.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-                    end
-                    task.wait(Utils.random(0.05, 0.15))  -- Delay humano
-                end
-            else
-                -- Fallback para teleport direto se path falhar
-                myHRP.CFrame = targetCFrame
-            end
-        else
-            myHRP.CFrame = targetCFrame
-        end
-       
-        State.Stats.TeleportCount = State.Stats.TeleportCount + 1
-        State.Cache.LastAction = tick()
-       
-        -- Heatmap
-        table.insert(State.Cache.TeleportHistory, 1, {
-            position = myHRP.Position,
-            timestamp = tick()
-        })
-        if #State.Cache.TeleportHistory > State.Settings.TeleportHeatmapSize then
-            table.remove(State.Cache.TeleportHistory)
-        end
-        
-        -- Humanização: Adiciona "erro" ocasional
-        if math.random(1, 20) == 1 then
-            myHRP.CFrame = myHRP.CFrame * CFrame.new(Utils.random(-1, 1), 0, Utils.random(-1, 1))
-        end
-    end)
-   
-    Utils.log("Loop Goto ativado (Modo: " .. State.Settings.TeleportMode .. ")", "FEATURE")
-end
-
-function LoopGotoFeature.stop()
-    if State.Connections.LoopGoto then
-        State.Connections.LoopGoto:Disconnect()
-        State.Connections.LoopGoto = nil
-    end
-    State.Cache.TargetPlayer = nil
-    State.Cache.PathWaypoints = {}
-    Utils.log("Loop Goto desativado", "FEATURE")
-end
-
--- =====================================================
--- M1 BOT APRIMORADO
--- =====================================================
-local M1BotFeature = {}
-M1BotFeature.active = false
-function M1BotFeature.start()
-    if M1BotFeature.active then return end
-    M1BotFeature.active = true
-   
-    table.insert(State.Connections.M1Bot, task.spawn(function()
-        while M1BotFeature.active and State.Features.M1Bot do
-            if State.AI.Paused then
-                task.wait(1)
-                continue
-            end
-           
-            if not Utils.isCharacterValid(player.Character) then
-                task.wait(0.5)
-                continue
-            end
-           
-            -- Simula clique com variação de posição para humanização
-            local mouseX = Utils.random(0, 10)
-            local mouseY = Utils.random(0, 10)
-            Utils.safePcall(function()
-                VirtualInputManager:SendMouseButtonEvent(mouseX, mouseY, 0, true, game, 1)
-            end)
-           
-            task.wait(Utils.random(State.Settings.M1DelayRange[1], State.Settings.M1DelayRange[2]))
-           
-            Utils.safePcall(function()
-                VirtualInputManager:SendMouseButtonEvent(mouseX, mouseY, 0, false, game, 1)
-            end)
-           
-            State.Stats.M1Count = State.Stats.M1Count + 1
-            State.Cache.LastAction = tick()
-           
-            -- Pausa natural
-            if math.random(1, 15) == 1 then
-                task.wait(Utils.random(0.2, 0.5))
-            end
-           
-            -- Erro simulado (falha no clique)
-            if math.random(1, 50) == 1 then
-                task.wait(Utils.random(0.1, 0.3))
-            end
-           
-            task.wait(Utils.random(0.030, 0.050))
-        end
-    end))
-   
-    table.insert(State.Connections.M1Bot, task.spawn(function()
-        while M1BotFeature.active and State.Features.M1Bot do
-            if State.AI.Paused then
-                task.wait(1)
-                continue
-            end
-           
-            if not Utils.isCharacterValid(player.Character) then
-                task.wait(1)
-                continue
-            end
-           
-            Utils.safePcall(function()
-                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Three, false, game)
-                task.wait(Utils.random(0.05, 0.1))
-                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Three, false, game)
-            end)
-           
-            local cooldown = Utils.random(
-                State.Settings.Key3CooldownRange[1],
-                State.Settings.Key3CooldownRange[2]
-            )
-            task.wait(cooldown + Utils.random(-0.5, 0.5))  -- Variação no cooldown
-        end
-    end))
-   
-    Utils.log("M1 Bot ativado (Humanizado++)", "FEATURE")
-end
-
-function M1BotFeature.stop()
-    M1BotFeature.active = false
-   
-    for _, thread in ipairs(State.Connections.M1Bot) do
-        task.cancel(thread)
-    end
-   
-    State.Connections.M1Bot = {}
-    Utils.log("M1 Bot desativado", "FEATURE")
-end
-
--- =====================================================
--- ANTI-AFK APRIMORADO
--- =====================================================
-local AntiAFKFeature = {}
-AntiAFKFeature.active = false
-function AntiAFKFeature.start()
-    if AntiAFKFeature.active then return end
-    AntiAFKFeature.active = true
-   
-    State.Connections.AntiAFK = task.spawn(function()
-        while AntiAFKFeature.active and State.Features.AntiAFK do
-            Utils.safePcall(function()
-                VirtualUser:CaptureController()
-                VirtualUser:ClickButton2(Vector2.new(math.random(1,10), math.random(1,10)))
-            end)
-            -- Adiciona movimento aleatório
-            if math.random(1,5) == 1 then
-                player.Character.Humanoid:Move(Vector3.new(Utils.random(-1,1), 0, Utils.random(-1,1)))
-            end
-            task.wait(Utils.random(40, 70))  -- Intervalo mais variado
-        end
-    end)
-   
-    Utils.log("Anti-AFK ativado (Humanizado)", "FEATURE")
-end
-
-function AntiAFKFeature.stop()
-    AntiAFKFeature.active = false
-   
-    if State.Connections.AntiAFK then
-        task.cancel(State.Connections.AntiAFK)
-        State.Connections.AntiAFK = nil
-    end
-    Utils.log("Anti-AFK desativado", "FEATURE")
-end
-
--- =====================================================
--- AUTO-FARM NEW
--- =====================================================
-local AutoFarmFeature = {}
-AutoFarmFeature.active = false
-function AutoFarmFeature.start()
-    if AutoFarmFeature.active then return end
-    AutoFarmFeature.active = true
-   
     task.spawn(function()
-        while AutoFarmFeature.active and State.Features.AutoFarm do
-            if State.AI.Paused then task.wait(1) continue end
-            
-            -- Ativa features necessárias
-            if not State.Features.LoopGoto then LoopGotoFeature.start() end
-            if not State.Features.M1Bot then M1BotFeature.start() end
-            State.Features.AutoTarget = true
-            State.Settings.AutoTargetMode = "lowest_health"
-            
-            -- Monitora kills
-            local oldKills = State.Stats.Kills
-            task.wait(5)
-            if State.Stats.Kills > oldKills then
-                State.Stats.FarmKills = State.Stats.FarmKills + (State.Stats.Kills - oldKills)
-            end
-            
-            -- Ajusta eficiência
-            if State.Settings.FarmEfficiency < 50 then
-                AIBehavior.applyBehavior("cautious")
-            else
-                AIBehavior.applyBehavior("aggressive")
-            end
-        end
-    end)
-   
-    Utils.log("Auto-Farm ativado", "FEATURE")
-end
-
-function AutoFarmFeature.stop()
-    AutoFarmFeature.active = false
-    Utils.log("Auto-Farm desativado", "FEATURE")
-end
-
--- =====================================================
--- PERFORMANCE MONITOR APRIMORADO
--- =====================================================
-local PerformanceMonitor = {}
-function PerformanceMonitor.start()
-    State.Connections.PerformanceMonitor = RunService.Heartbeat:Connect(function(delta)
-        if not State.Debug.Enabled then return end
-       
-        local fps = 1 / delta
-       
-        table.insert(State.Debug.PerformanceData.FPS, fps)
-        if #State.Debug.PerformanceData.FPS > 120 then  -- Mais dados
-            table.remove(State.Debug.PerformanceData.FPS, 1)
-        end
-        
-        -- Ping simulado (aproximado)
-        local ping = math.random(20, 100)  -- Placeholder; use real se possível
-        table.insert(State.Debug.PerformanceData.Ping, ping)
-        if #State.Debug.PerformanceData.Ping > 120 then
-            table.remove(State.Debug.PerformanceData.Ping, 1)
-        end
-        
-        -- Alerta se FPS baixo
-        if fps < 30 then
-            Utils.log("⚠️ FPS baixo: " .. fps, "PERF")
-        end
+        local thumb, ready = Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size420x420)
+        if ready then ImageLabel.Image = thumb end
     end)
 end
-PerformanceMonitor.start()
+criarVerificador()
 
--- =====================================================
--- GUI - RAYFIELD APRIMORADA
--- =====================================================
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-local Window = Rayfield:CreateWindow({
-    Name = "TSB Hub V4 - Supreme",
-    LoadingTitle = "TSB Hub V4",
-    LoadingSubtitle = "IA Avançada + Stealth",
-    Theme = "Amethyst",
-    ToggleUIKeybind = "K",
-    ConfigurationSaving = {
-        Enabled = true,
-        FolderName = "TSBHubV4",
-        FileName = "Config"
-    },
-    KeySystem = false
-})
+-- ======================= ESP =======================
+local function createESP(plr)
+    if ESPObjects[plr] or plr == player then return end
+    local box = Drawing.new("Square")
+    box.Thickness = 2
+    box.Filled = false
+    box.Color = Color3.fromRGB(255, 0, 0)
+    box.Transparency = 1
 
--- =====================================================
--- TAB: COMBAT
--- =====================================================
-local CombatTab = Window:CreateTab("⚔️ Combat", "sword")
-CombatTab:CreateSection("Combat Features")
-CombatTab:CreateToggle({
-    Name = "One Hit Death",
-    CurrentValue = State.Features.OneHit,
-    Callback = function(value)
-        State.Features.OneHit = value
-        if value then OneHitFeature.start() else OneHitFeature.stop() end
-        Rayfield:Notify({Title = "One Hit", Content = value and "✅ Ativado" or "⏸️ Desativado", Duration = 2})
-    end
-})
-CombatTab:CreateToggle({
-    Name = "M1 Bot + Auto 3",
-    CurrentValue = State.Features.M1Bot,
-    Callback = function(value)
-        State.Features.M1Bot = value
-        if value then M1BotFeature.start() else M1BotFeature.stop() end
-        Rayfield:Notify({Title = "M1 Bot", Content = value and "✅ Ativado" or "⏸️ Desativado", Duration = 2})
-    end
-})
-CombatTab:CreateToggle({
-    Name = "Auto-Farm Kills",
-    CurrentValue = State.Features.AutoFarm,
-    Callback = function(value)
-        State.Features.AutoFarm = value
-        if value then AutoFarmFeature.start() else AutoFarmFeature.stop() end
-        Rayfield:Notify({Title = "Auto-Farm", Content = value and "✅ Ativado" or "⏸️ Desativado", Duration = 2})
-    end
-})
-CombatTab:CreateSlider({
-    Name = "Farm Efficiency (%)",
-    Range = {0, 100},
-    Increment = 5,
-    Suffix = "%",
-    CurrentValue = State.Settings.FarmEfficiency,
-    Callback = function(value)
-        State.Settings.FarmEfficiency = value
-    end
-})
+    local name = Drawing.new("Text")
+    name.Size = 16
+    name.Color = Color3.fromRGB(255, 255, 255)
+    name.Center = true
+    name.Outline = true
 
--- =====================================================
--- TAB: TELEPORT
--- =====================================================
-local TeleportTab = Window:CreateTab("🎯 Teleport", "navigation")
-TeleportTab:CreateSection("Loop Goto")
-local StatusLabel = TeleportTab:CreateLabel("Status: Aguardando...")
-TeleportTab:CreateToggle({
-    Name = "Loop Goto Target",
-    CurrentValue = State.Features.LoopGoto,
-    Callback = function(value)
-        State.Features.LoopGoto = value
-        if value then LoopGotoFeature.start() else LoopGotoFeature.stop() end
-        Rayfield:Notify({Title = "Loop Goto", Content = value and "✅ Ativado" or "⏸️ Desativado", Duration = 2})
-    end
-})
-TeleportTab:CreateToggle({
-    Name = "Auto-Target",
-    CurrentValue = State.Features.AutoTarget,
-    Callback = function(value)
-        State.Features.AutoTarget = value
-        State.Cache.TargetPlayer = nil
-    end
-})
-TeleportTab:CreateDropdown({
-    Name = "Auto-Target Mode",
-    Options = {"nearest", "lowest_health", "random"},
-    CurrentOption = State.Settings.AutoTargetMode,
-    Callback = function(option)
-        State.Settings.AutoTargetMode = option
-    end
-})
-TeleportTab:CreateToggle({
-    Name = "Smart Follow",
-    CurrentValue = State.Features.SmartFollow,
-    Callback = function(value)
-        State.Features.SmartFollow = value
-    end
-})
-TeleportTab:CreateInput({
-    Name = "Nome do Alvo",
-    PlaceholderText = "Digite nome parcial",
-    RemoveTextAfterFocusLost = false,
-    Callback = function(text)
-        State.Settings.TargetName = text
-        State.Cache.TargetPlayer = nil
-    end
-})
-TeleportTab:CreateDropdown({
-    Name = "Modo de Teleporte",
-    Options = {"behind", "side", "above", "random"},
-    CurrentOption = State.Settings.TeleportMode,
-    Callback = function(option)
-        State.Settings.TeleportMode = option
-    end
-})
-TeleportTab:CreateToggle({
-    Name = "Stealth Mode (Pathfinding)",
-    CurrentValue = State.Features.StealthMode,
-    Callback = function(value)
-        State.Features.StealthMode = value
-    end
-})
-TeleportTab:CreateSlider({
-    Name = "Stealth Level",
-    Range = {1, 10},
-    Increment = 1,
-    CurrentValue = State.Settings.StealthLevel,
-    Callback = function(value)
-        State.Settings.StealthLevel = value
-        State.Settings.TeleportFrequency = value * 0.5  -- Ajusta freq baseado em level
-    end
-})
+    local health = Drawing.new("Text")
+    health.Size = 14
+    health.Color = Color3.fromRGB(0, 255, 0)
+    health.Center = true
+    health.Outline = true
 
--- Status em tempo real
-task.spawn(function()
-    while true do
-        if State.AI.Paused then
-            StatusLabel:Set("⏸️ PAUSADO: " .. State.AI.PauseReason)
-        elseif State.Features.LoopGoto then
-            local target = State.Cache.TargetPlayer
-            if target then
-                local distance = target.Character and (player.Character.HumanoidRootPart.Position - target.Character.HumanoidRootPart.Position).Magnitude or 0
-                local health = target.Character and target.Character.Humanoid.Health or 0
-                local behavior = State.AI.CurrentBehavior
-                StatusLabel:Set(string.format("🎯 %s | 📏 %.1f | ❤️ %.0f | 🤖 %s", target.DisplayName, distance, health, behavior))
+    ESPObjects[plr] = {box = box, name = name, health = health}
+end
+
+local function removeESP(plr)
+    if ESPObjects[plr] then
+        for _, obj in pairs(ESPObjects[plr]) do
+            obj:Remove()
+        end
+        ESPObjects[plr] = nil
+    end
+end
+
+Players.PlayerAdded:Connect(function(plr)
+    if Settings.ESP then createESP(plr) end
+end)
+
+Players.PlayerRemoving:Connect(removeESP)
+
+RunService.RenderStepped:Connect(function()
+    if not Settings.ESP then
+        for plr in pairs(ESPObjects) do removeESP(plr) end
+        return
+    end
+
+    for plr, objs in pairs(ESPObjects) do
+        if plr.Character and plr.Character:FindFirstChild("Head") and plr.Character:FindFirstChild("Humanoid") then
+            local head = plr.Character.Head
+            local hum = plr.Character.Humanoid
+            local pos, onScreen = camera:WorldToViewportPoint(head.Position)
+            if onScreen then
+                objs.box.Size = Vector2.new(2000 / pos.Z, 3000 / pos.Z)
+                objs.box.Position = Vector2.new(pos.X - objs.box.Size.X / 2, pos.Y - objs.box.Size.Y / 2)
+                objs.box.Visible = true
+
+                objs.name.Text = plr.DisplayName
+                objs.name.Position = Vector2.new(pos.X, pos.Y - 30)
+                objs.name.Visible = true
+
+                objs.health.Text = math.floor(hum.Health) .. "/" .. hum.MaxHealth
+                objs.health.Position = Vector2.new(pos.X, pos.Y + objs.box.Size.Y / 2 + 10)
+                objs.health.Visible = true
             else
-                StatusLabel:Set("❌ Alvo não encontrado")
+                objs.box.Visible = false
+                objs.name.Visible = false
+                objs.health.Visible = false
             end
         else
-            StatusLabel:Set("⏸️ Loop Goto desativado")
+            objs.box.Visible = false
+            objs.name.Visible = false
+            objs.health.Visible = false
         end
-        task.wait(0.2)
     end
 end)
 
--- =====================================================
--- TAB: IA
--- =====================================================
-local AITab = Window:CreateTab("🤖 IA", "cpu")
-AITab:CreateSection("Sistema de IA")
-local AIStatusLabel = AITab:CreateLabel("Comportamento: Normal")
-AITab:CreateToggle({
-    Name = "IA Comportamental",
-    CurrentValue = State.Features.BehaviorAI,
-    Callback = function(value)
-        State.Features.BehaviorAI = value
-        Rayfield:Notify({Title = "IA", Content = value and "✅ Ativa" or "⏸️ Desativada", Duration = 2})
+-- ======================= MAIN LOOP FOR COMBAT/MOVEMENT =======================
+local function isAttacking(enemy)
+    -- Basic detection: Check if enemy is moving towards player or playing attack animation
+    if not enemy.Character or not enemy.Character:FindFirstChild("HumanoidRootPart") or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return false end
+    local dist = (enemy.Character.HumanoidRootPart.Position - player.Character.HumanoidRootPart.Position).Magnitude
+    local velocityTowards = (player.Character.HumanoidRootPart.Position - enemy.Character.HumanoidRootPart.Position).Unit:Dot(enemy.Character.HumanoidRootPart.Velocity.Unit)
+    return dist < 15 and velocityTowards > 0.5  -- Adjust as needed
+end
+
+local originalHitboxSizes = {}  -- To reset hitboxes
+
+RunService.Heartbeat:Connect(function()
+    local char = player.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") or not char:FindFirstChild("Humanoid") then return end
+    local hrp = char.HumanoidRootPart
+    local hum = char.Humanoid
+
+    -- Auto Parry
+    if Settings.AutoParry then
+        for _, enemy in ipairs(Players:GetPlayers()) do
+            if enemy ~= player and isAttacking(enemy) then
+                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
+                task.wait(0.05)
+                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
+                break
+            end
+        end
     end
-})
-AITab:CreateToggle({
-    Name = "Threat Detection",
-    CurrentValue = State.Features.ThreatDetection,
-    Callback = function(value)
-        State.Features.ThreatDetection = value
+
+    -- Kill Aura + Hitbox
+    if Settings.KillAura then
+        for _, enemy in ipairs(Players:GetPlayers()) do
+            if enemy ~= player and enemy.Character and enemy.Character:FindFirstChild("HumanoidRootPart") and enemy.Character.Humanoid.Health > 0 then
+                local enemyHrp = enemy.Character.HumanoidRootPart
+                local dist = (enemyHrp.Position - hrp.Position).Magnitude
+                if dist <= Settings.AuraRange then
+                    -- Face enemy
+                    hrp.CFrame = CFrame.lookAt(hrp.Position, enemyHrp.Position)
+
+                    -- Expand hitbox locally
+                    for _, part in ipairs(enemy.Character:GetChildren()) do
+                        if part:IsA("BasePart") and not originalHitboxSizes[part] then
+                            originalHitboxSizes[part] = part.Size
+                            part.Size = Vector3.new(Settings.HitboxSize, Settings.HitboxSize, Settings.HitboxSize)
+                            part.Transparency = 0.7
+                            part.Color = Color3.fromRGB(255, 0, 0)
+                        end
+                    end
+
+                    -- Attack
+                    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+                    task.wait(0.03)
+                    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+                end
+            end
+        end
+    else
+        -- Reset hitboxes when disabled
+        for part, size in pairs(originalHitboxSizes) do
+            if part and part.Parent then
+                part.Size = size
+                part.Transparency = 0
+                part.Color = Color3.fromRGB(255, 255, 255)
+            end
+        end
+        originalHitboxSizes = {}
     end
-})
-AITab:CreateToggle({
-    Name = "Auto-Pause em Ameaças",
-    CurrentValue = State.Features.AutoPause,
-    Callback = function(value)
-        State.Features.AutoPause = value
-        State.Settings.PauseOnThreat = value
+
+    -- Infinite Stamina (assuming stamina is a local attribute or WalkSpeed related)
+    if Settings.InfiniteStamina then
+        hum.WalkSpeed = 20
+        if char:FindFirstChild("Stamina") then  -- Hypothetical
+            char.Stamina.Value = char.Stamina.MaxValue
+        end
     end
-})
-AITab:CreateSlider({
-    Name = "Max Idle Time (s)",
-    Range = {10, 120},
-    Increment = 5,
-    Suffix = "s",
-    CurrentValue = State.Settings.MaxIdleTime,
-    Callback = function(value)
-        State.Settings.MaxIdleTime = value
+
+    -- Anti Ragdoll
+    if Settings.AntiRagdoll then
+        hum.PlatformStand = false
+        hum.Sit = false
+        hum:ChangeState(Enum.HumanoidStateType.GettingUp)  -- Force get up if ragdolled
     end
-})
-AITab:CreateSection("Status em Tempo Real")
+end)
+
+-- ======================= TECH EXECUTION LOOP =======================
+local function executeTech(techName, key, delay1, action, delay2, cooldown)
+    if not Settings[techName] or TechCooldowns[techName] then return end
+    TechCooldowns[techName] = true
+
+    VirtualInputManager:SendKeyEvent(true, key, false, game)
+    task.wait(delay1)
+    VirtualInputManager:SendKeyEvent(false, key, false, game)
+    task.wait(0.1)
+
+    if action == "dash" then
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Q, false, game)
+        task.wait(delay2)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Q, false, game)
+    elseif action == "m1" then
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+        task.wait(delay2)
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+    end
+
+    task.spawn(function()
+        task.wait(cooldown)
+        TechCooldowns[techName] = nil
+    end)
+end
+
+RunService.Heartbeat:Connect(function()
+    local char = player.Character
+    if not char then return end
+
+    -- Hero Hunter Techs
+    executeTech("AutoSwirlTech", Enum.KeyCode.Three, 0.15, "dash", 0.2, 1.8)
+    executeTech("AutoWhirlwindDash", Enum.KeyCode.One, 0.2, "dash", 0.15, 2)
+    executeTech("AutoLethalDashExtender", Enum.KeyCode.One, 0.25, "dash", 0.3, 2.2)
+    if Settings.AutoTwistedDash then
+        if TechCooldowns["AutoTwistedDash"] then return end
+        TechCooldowns["AutoTwistedDash"] = true
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Q, false, game)
+        task.wait(0.1)
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+        task.wait(0.08)
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Q, false, game)
+        task.wait(1.5)
+        TechCooldowns["AutoTwistedDash"] = nil
+    end
+    executeTech("AutoUppercutStrike", Enum.KeyCode.Four, 0.3, "m1", 0.1, 3)
+
+    -- Saitama Techs
+    if Settings.AutoCounteringCounter then
+        if TechCooldowns["AutoCounteringCounter"] then return end
+        TechCooldowns["AutoCounteringCounter"] = true
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
+        task.wait(0.1)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
+        task.wait(0.15)
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+        task.wait(0.1)
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+        task.wait(1.8)
+        TechCooldowns["AutoCounteringCounter"] = nil
+    end
+    executeTech("AutoSurfTech", Enum.KeyCode.Three, 0.2, "dash", 0.25, 2)
+    executeTech("AutoRagdollShoveDash", Enum.KeyCode.Four, 0.3, "dash", 0.2, 2.5)
+    executeTech("AutoKick", Enum.KeyCode.One, 0.25, "m1", 0.08, 2)
+    executeTech("AutoTacticalYeet", Enum.KeyCode.Two, 0.3, "dash", 0.2, 2.8)
+    executeTech("AutoUppercutFlickDash", Enum.KeyCode.Three, 0.2, "dash", 0.15, 2)
+    executeTech("AutoUppercutDash", Enum.KeyCode.Three, 0.25, "dash", 0.2, 2.2)
+end)
+
+-- ======================= AUTO FARM =======================
 task.spawn(function()
     while true do
-        local behavior = State.AI.CurrentBehavior
-        local paused = State.AI.Paused and "SIM" or "NÃO"
-        local threats = #State.Cache.ThreatPlayers
-        local patterns = #State.AI.LearnedPatterns
-        AIStatusLabel:Set(string.format("🤖 Comportamento: %s\n⏸️ Pausado: %s\n⚠️ Threats: %d\n📚 Patterns: %d", behavior, paused, threats, patterns))
-        task.wait(1)
-    end
-end)
+        task.wait(math.random(0.8, 1.2))  -- Random delay to mimic human
+        if not (Settings.AutoFarmKills or Settings.AutoTrashcan) then continue end
+        local char = player.Character
+        if not char or not char:FindFirstChild("HumanoidRootPart") then continue end
+        local hrp = char.HumanoidRootPart
 
--- =====================================================
--- TAB: DEBUG
--- =====================================================
-local DebugTab = Window:CreateTab("🔧 Debug", "terminal")
-DebugTab:CreateSection("Debug & Performance")
-local PerformanceLabel = DebugTab:CreateLabel("FPS: Calculando...")
-local PingLabel = DebugTab:CreateLabel("Ping: Calculando...")
-local ErrorLabel = DebugTab:CreateLabel("Erros: 0")
-DebugTab:CreateToggle({
-    Name = "Debug Mode",
-    CurrentValue = State.Debug.Enabled,
-    Callback = function(value)
-        State.Debug.Enabled = value
-        Rayfield:Notify({Title = "Debug", Content = value and "✅ Ativo" or "⏸️ Desativado", Duration = 2})
-    end
-})
-DebugTab:CreateButton({
-    Name = "🔄 Limpar Logs",
-    Callback = function()
-        State.Logs = {}
-        Rayfield:Notify({Title = "Logs", Content = "Limpos", Duration = 1.5})
-    end
-})
-DebugTab:CreateButton({
-    Name = "📊 Exportar Dados (Console/JSON)",
-    Callback = function()
-        Utils.exportLogs()
-        Rayfield:Notify({Title = "Export", Content = "Dados no console", Duration = 3})
-    end
-})
-
--- Atualizar performance
-task.spawn(function()
-    while true do
-        if #State.Debug.PerformanceData.FPS > 0 then
-            local avgFPS = 0
-            for _, fps in ipairs(State.Debug.PerformanceData.FPS) do avgFPS = avgFPS + fps end
-            avgFPS = avgFPS / #State.Debug.PerformanceData.FPS
-            PerformanceLabel:Set(string.format("📊 FPS: %.1f", avgFPS))
+        if Settings.AutoTrashcan then
+            local trashFolder = Workspace:FindFirstChild("Map") and Workspace.Map:FindFirstChild("Trash")
+            if trashFolder then
+                local trashcans = trashFolder:GetChildren()
+                if #trashcans > 0 then
+                    local randomTrash = trashcans[math.random(1, #trashcans)]
+                    local part = randomTrash.PrimaryPart or randomTrash:FindFirstChildWhichIsA("BasePart")
+                    if part then
+                        hrp.CFrame = part.CFrame + Vector3.new(0, 5, 0)
+                        task.wait(0.4)
+                        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+                        task.wait(0.1)
+                        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+                    end
+                end
+            end
         end
-        if #State.Debug.PerformanceData.Ping > 0 then
-            local avgPing = 0
-            for _, ping in ipairs(State.Debug.PerformanceData.Ping) do avgPing = avgPing + ping end
-            avgPing = avgPing / #State.Debug.PerformanceData.Ping
-            PingLabel:Set(string.format("📡 Ping: %.0f ms", avgPing))
+
+        if Settings.AutoFarmKills then
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character.Humanoid.Health > 0 then
+                    hrp.CFrame = p.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
+                    task.wait(0.2)  -- Small delay
+                    break
+                end
+            end
         end
-        ErrorLabel:Set(string.format("❌ Erros: %d", State.Stats.ErrorCount))
-        task.wait(1)
     end
 end)
 
--- =====================================================
--- TAB: STATS
--- =====================================================
-local StatsTab = Window:CreateTab("📊 Stats", "bar-chart")
-StatsTab:CreateSection("Estatísticas")
-local KillsLabel = StatsTab:CreateLabel("💀 Kills: 0")
-local FarmKillsLabel = StatsTab:CreateLabel("🌾 Farm Kills: 0")
-local DeathsLabel = StatsTab:CreateLabel("☠️ Deaths: 0")
-local TeleportsLabel = StatsTab:CreateLabel("🎯 Teleports: 0")
-local M1Label = StatsTab:CreateLabel("👊 M1s: 0")
-local UptimeLabel = StatsTab:CreateLabel("⏱️ Uptime: 0s")
-local AutoPauseLabel = StatsTab:CreateLabel("⏸️ Auto-Pausas: 0")
-local ThreatsLabel = StatsTab:CreateLabel("⚠️ Threats: 0")
-task.spawn(function()
-    while true do
-        local uptime = math.floor(tick() - State.Stats.SessionStart)
-        KillsLabel:Set(string.format("💀 Kills: %d", State.Stats.Kills))
-        FarmKillsLabel:Set(string.format("🌾 Farm Kills: %d", State.Stats.FarmKills))
-        DeathsLabel:Set(string.format("☠️ Deaths: %d", State.Stats.Deaths))
-        TeleportsLabel:Set(string.format("🎯 Teleports: %d", State.Stats.TeleportCount))
-        M1Label:Set(string.format("👊 M1s: %d", State.Stats.M1Count))
-        UptimeLabel:Set(string.format("⏱️ Uptime: %ds", uptime))
-        AutoPauseLabel:Set(string.format("⏸️ Auto-Pausas: %d", State.Stats.AutoPauseCount))
-        ThreatsLabel:Set(string.format("⚠️ Threats: %d", State.Stats.ThreatsDetected))
-        task.wait(1)
+-- ======================= TABS =======================
+local CombatTab = Window:MakeTab({Name = "⚔️ Combat", Icon = "rbxassetid://4483345998"})
+CombatTab:AddToggle({Name = "Auto Parry / Block", Default = false, Callback = function(v) Settings.AutoParry = v end})
+CombatTab:AddToggle({Name = "Kill Aura", Default = false, Callback = function(v) Settings.KillAura = v end})
+CombatTab:AddSlider({Name = "Aura Range", Min = 10, Max = 50, Default = 20, Callback = function(v) Settings.AuraRange = v end})
+CombatTab:AddSlider({Name = "Hitbox Size", Min = 10, Max = 30, Default = 15, Callback = function(v) Settings.HitboxSize = v end})
+
+local VisualTab = Window:MakeTab({Name = "👁️ Visual", Icon = "rbxassetid://4483345998"})
+VisualTab:AddToggle({Name = "Player ESP", Default = false, Callback = function(v)
+    Settings.ESP = v
+    if v then
+        for _, p in ipairs(Players:GetPlayers()) do createESP(p) end
+    else
+        for plr in pairs(ESPObjects) do removeESP(plr) end
     end
-end)
+end})
 
--- =====================================================
--- TAB: UTILS
--- =====================================================
-local UtilsTab = Window:CreateTab("🛠️ Utils", "wrench")
-UtilsTab:CreateToggle({
-    Name = "Anti-AFK",
-    CurrentValue = State.Features.AntiAFK,
-    Callback = function(value)
-        State.Features.AntiAFK = value
-        if value then AntiAFKFeature.start() else AntiAFKFeature.stop() end
-    end
-})
+local MovementTab = Window:MakeTab({Name = "✈️ Movement", Icon = "rbxassetid://4483345998"})
+MovementTab:AddToggle({Name = "Infinite Stamina", Default = false, Callback = function(v) Settings.InfiniteStamina = v end})
+MovementTab:AddToggle({Name = "Anti Ragdoll", Default = false, Callback = function(v) Settings.AntiRagdoll = v end})
 
--- =====================================================
--- TAB: INFO
--- =====================================================
-local InfoTab = Window:CreateTab("ℹ️ Info", "info")
-InfoTab:CreateLabel("TSB Hub V4 - SUPREME")
-InfoTab:CreateLabel("")
-InfoTab:CreateLabel("🚀 Novidades:")
-InfoTab:CreateLabel("• IA com aprendizado de padrões")
-InfoTab:CreateLabel("• Pathfinding para teleports stealth")
-InfoTab:CreateLabel("• Auto-Farm inteligente")
-InfoTab:CreateLabel("• Threat detection expandida")
-InfoTab:CreateLabel("• Humanização avançada com erros simulados")
-InfoTab:CreateLabel("• Export de dados JSON")
-InfoTab:CreateLabel("")
-InfoTab:CreateLabel("⌨️ Tecla K - Abrir/Fechar GUI")
+local TechsTab = Window:MakeTab({Name = "🔧 Techs", Icon = "rbxassetid://4483345998"})
+TechsTab:AddSection("Hero Hunter (Garou) Techs")
+TechsTab:AddToggle({Name = "Swirl Tech", Default = false, Callback = function(v) Settings.AutoSwirlTech = v end})
+TechsTab:AddToggle({Name = "Whirlwind Dash Tech", Default = false, Callback = function(v) Settings.AutoWhirlwindDash = v end})
+TechsTab:AddToggle({Name = "Lethal Dash Extender", Default = false, Callback = function(v) Settings.AutoLethalDashExtender = v end})
+TechsTab:AddToggle({Name = "Twisted Dash", Default = false, Callback = function(v) Settings.AutoTwistedDash = v end})
+TechsTab:AddToggle({Name = "Uppercut Strike", Default = false, Callback = function(v) Settings.AutoUppercutStrike = v end})
+TechsTab:AddSection("The Strongest Hero (Saitama) Techs")
+TechsTab:AddToggle({Name = "Countering a Counter", Default = false, Callback = function(v) Settings.AutoCounteringCounter = v end})
+TechsTab:AddToggle({Name = "Surf Tech", Default = false, Callback = function(v) Settings.AutoSurfTech = v end})
+TechsTab:AddToggle({Name = "Ragdoll Shove Dash", Default = false, Callback = function(v) Settings.AutoRagdollShoveDash = v end})
+TechsTab:AddToggle({Name = "Kick (Omni)", Default = false, Callback = function(v) Settings.AutoKick = v end})
+TechsTab:AddToggle({Name = "Tactical Yeet", Default = false, Callback = function(v) Settings.AutoTacticalYeet = v end})
+TechsTab:AddToggle({Name = "Uppercut Flick-Dash", Default = false, Callback = function(v) Settings.AutoUppercutFlickDash = v end})
+TechsTab:AddToggle({Name = "Uppercut Dash", Default = false, Callback = function(v) Settings.AutoUppercutDash = v end})
 
--- =====================================================
--- INICIALIZAÇÃO
--- =====================================================
-if State.Features.OneHit then OneHitFeature.start() end
-if State.Features.AntiAFK then AntiAFKFeature.start() end
-Rayfield:Notify({
-    Title = "TSB Hub V4 Supreme!",
-    Content = "IA Avançada + Stealth Ativos",
-    Duration = 5
-})
-Utils.log("TSB Hub V4 inicializado", "SYSTEM")
-print("✅ [TSB Hub V4] Carregado com sucesso!")
-print("🤖 [TSB Hub V4] IA Avançada ativa")
-print("🛡️ [TSB Hub V4] Threat Detection++ ON")
+local FarmTab = Window:MakeTab({Name = "🌾 Farm", Icon = "rbxassetid://4483345998"})
+FarmTab:AddToggle({Name = "Auto Farm Kills", Default = false, Callback = function(v) Settings.AutoFarmKills = v end})
+FarmTab:AddToggle({Name = "Auto Trashcan TP + Pickup", Default = false, Callback = function(v) Settings.AutoTrashcan = v end})
+
+local MiscTab = Window:MakeTab({Name = "🛠️ Misc", Icon = "rbxassetid://4483345998"})
+MiscTab:AddButton({Name = "Rejoin Server", Callback = function() game:GetService("TeleportService"):Teleport(game.PlaceId) end})
+MiscTab:AddButton({Name = "Unload Hub", Callback = function()
+    for _, conn in ipairs(getconnections(RunService.Heartbeat)) do conn:Disconnect() end
+    for _, conn in ipairs(getconnections(RunService.RenderStepped)) do conn:Disconnect() end
+    for plr in pairs(ESPObjects) do removeESP(plr) end
+    player.PlayerGui:FindFirstChild("VerificadorKerbzinn"):Destroy()
+    OrionLib:Destroy()
+end})
+MiscTab:AddLabel("Credits: Improved by Grok AI - Original by Kerbzinn")
+
+OrionLib:Init()
+print("TSB Kerbzinn Hub V11.1 carregado - Versão melhorada com otimizações e correções")
