@@ -1,13 +1,30 @@
 loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Orion/main/source"))()
--- TSB Kerbzinn Hub V13.0 - 2026 (ULTRA OTIMIZADO & AVANÇADO)
+
+-- ============= TSB KERBZINN HUB V13.5 - MEGA UI ORION =============
+-- Ultra Premium UI Design - Profissional & Otimizado para máxima usabilidade
+
 local OrionLib = loadstring(game:HttpGet('https://raw.githubusercontent.com/shlexware/Orion/main/source'))()
+
+-- ============= CORES CUSTOMIZADAS =============
+local Colors = {
+    Primary = Color3.fromRGB(100, 0, 255),
+    Secondary = Color3.fromRGB(0, 170, 255),
+    Success = Color3.fromRGB(0, 255, 100),
+    Warning = Color3.fromRGB(255, 200, 0),
+    Danger = Color3.fromRGB(255, 0, 0),
+    Dark = Color3.fromRGB(20, 20, 20),
+    Light = Color3.fromRGB(255, 255, 255)
+}
+
+-- ============= JANELA PRINCIPAL COM TEMA =============
 local Window = OrionLib:MakeWindow({
-    Name = "Nameless script",
+    Name = "unamelessHub",
     HidePremium = false,
     SaveConfig = true,
-    ConfigFolder = "TSB script ~by O_Pottencias",
+    ConfigFolder = "By 0_Potencias",
     IntroEnabled = true,
-    IntroText = "Carregando o hub MAIS OP e AVANÇADO de 2026... ⚡🔥"
+    IntroText = "⚡ Carregando o hub mais INSANO de 2026...",
+    IntroTransparency = 0.8
 })
 
 -- ============= SERVICES =============
@@ -16,42 +33,44 @@ local RunService = game:GetService("RunService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local player = Players.LocalPlayer
 local camera = Workspace.CurrentCamera
 
--- ============= SETTINGS =============
+-- ============= SETTINGS COMPLETO =============
 local Settings = {
     -- Combat
     AutoParry = false,
     ParryDistance = 15,
     ParryVelocityThreshold = 0.5,
-    ParryPrediction = true,  -- Nova feature: Previsão de parry
+    ParryPrediction = true,
 
     -- Visual
     ESP = false,
     ESPDistance = 300,
-    ESPTracers = false,  -- Nova: Tracers para inimigos
+    ESPTracers = false,
+    ESPHealthBar = false,
 
     -- Kill Aura
     KillAura = false,
     AuraRange = 20,
     HitboxSize = 15,
-    AuraDamageMultiplier = 1.5,  -- Nova: Multiplicador de dano (se possível via exploit)
+    AuraDamageMultiplier = 1.5,
 
     -- Movement
     InfiniteStamina = false,
     WalkSpeed = 20,
-    JumpPower = 50,  -- Nova: Jump power ajustável
+    JumpPower = 50,
     AntiRagdoll = false,
-    Fly = false,  -- Nova feature: Fly hack
+    Fly = false,
     FlySpeed = 50,
+    NoClip = false,
 
     -- Farm
     AutoFarmKills = false,
     AutoTrashcan = false,
+    AutoFarmMode = "kills",
 
-    -- Techs
+    -- Techs (todos desligados por padrão)
     AutoSwirlTech = false,
     AutoWhirlwindDash = false,
     AutoLethalDashExtender = false,
@@ -66,20 +85,21 @@ local Settings = {
     AutoUppercutDash = false,
 
     -- Advanced
-    AutoFarmMode = "kills", -- "kills" or "trashcan" or "both"
     EnableDebug = false,
-    AntiBan = false,  -- Nova: Tentativa de anti-ban (evitar detecção)
+    AntiBan = false,
 }
 
 -- ============= STATE MANAGEMENT =============
 local ESPObjects = {}
 local TracerObjects = {}
+local HealthBarObjects = {}
 local TechCooldowns = {}
 local originalHitboxSizes = {}
 local isAlive = true
 local lastCharacter = nil
 local activeEnemies = {}
 local flyConnection = nil
+local noClipConnection = nil
 
 -- ============= UTILITY FUNCTIONS =============
 local function getCharacter()
@@ -98,72 +118,94 @@ end
 
 local function debug(msg)
     if Settings.EnableDebug then
-        print("[TSB HUB DEBUG] " .. tostring(msg))
+        print("[🔥 TSB HUB] " .. tostring(msg))
     end
 end
 
--- ============= UI VERIFICATION =============
+-- ============= UI VERIFICATION AVANÇADO =============
 local function criarVerificador()
     local ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = "VerificadorKerbzinn"
     ScreenGui.ResetOnSpawn = false
     ScreenGui.Parent = player:WaitForChild("PlayerGui")
 
-    local Frame = Instance.new("Frame")
-    Frame.Size = UDim2.new(0, 300, 0, 120)  -- Aumentado para melhor visual
-    Frame.Position = UDim2.new(0, 15, 0, 15)
-    Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-    Frame.BackgroundTransparency = 0.05
-    Frame.Parent = ScreenGui
+    local MainFrame = Instance.new("Frame")
+    MainFrame.Size = UDim2.new(0, 320, 0, 140)
+    MainFrame.Position = UDim2.new(0, 15, 0, 15)
+    MainFrame.BackgroundColor3 = Colors.Dark
+    MainFrame.BackgroundTransparency = 0.05
+    MainFrame.Parent = ScreenGui
 
     local UICorner = Instance.new("UICorner")
-    UICorner.CornerRadius = UDim.new(0, 12)
-    UICorner.Parent = Frame
+    UICorner.CornerRadius = UDim.new(0, 15)
+    UICorner.Parent = MainFrame
 
     local UIStroke = Instance.new("UIStroke")
-    UIStroke.Color = Color3.fromRGB(100, 0, 255)
-    UIStroke.Thickness = 2
-    UIStroke.Parent = Frame
+    UIStroke.Color = Colors.Primary
+    UIStroke.Thickness = 2.5
+    UIStroke.Parent = MainFrame
 
+    local UIGradient = Instance.new("UIGradient")
+    UIGradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Colors.Primary),
+        ColorSequenceKeypoint.new(1, Colors.Secondary)
+    }
+    UIGradient.Transparency = NumberSequence.new{
+        NumberSequenceKeypoint.new(0, 0.85),
+        NumberSequenceKeypoint.new(1, 0.95)
+    }
+    UIGradient.Parent = MainFrame
+
+    -- Avatar
     local ImageLabel = Instance.new("ImageLabel")
-    ImageLabel.Size = UDim2.new(0, 80, 0, 80)
-    ImageLabel.Position = UDim2.new(0, 10, 0, 20)
-    ImageLabel.BackgroundTransparency = 1
-    ImageLabel.Parent = Frame
+    ImageLabel.Size = UDim2.new(0, 90, 0, 90)
+    ImageLabel.Position = UDim2.new(0, 12, 0, 25)
+    ImageLabel.BackgroundTransparency = 0
+    ImageLabel.BackgroundColor3 = Colors.Dark
+    ImageLabel.Parent = MainFrame
 
     local ImageCorner = Instance.new("UICorner")
     ImageCorner.CornerRadius = UDim.new(1, 0)
     ImageCorner.Parent = ImageLabel
 
+    local ImageStroke = Instance.new("UIStroke")
+    ImageStroke.Color = Colors.Secondary
+    ImageStroke.Thickness = 2
+    ImageStroke.Parent = ImageLabel
+
+    -- Nome
     local NomeLabel = Instance.new("TextLabel")
-    NomeLabel.Size = UDim2.new(0, 200, 0, 30)
-    NomeLabel.Position = UDim2.new(0, 100, 0, 20)
+    NomeLabel.Size = UDim2.new(0, 210, 0, 30)
+    NomeLabel.Position = UDim2.new(0, 115, 0, 12)
     NomeLabel.BackgroundTransparency = 1
     NomeLabel.Text = "👤 " .. player.DisplayName
-    NomeLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    NomeLabel.TextColor3 = Colors.Light
     NomeLabel.TextScaled = true
     NomeLabel.Font = Enum.Font.GothamBold
-    NomeLabel.Parent = Frame
+    NomeLabel.Parent = MainFrame
 
+    -- Status
     local StatusLabel = Instance.new("TextLabel")
-    StatusLabel.Size = UDim2.new(0, 200, 0, 30)
-    StatusLabel.Position = UDim2.new(0, 100, 0, 50)
+    StatusLabel.Size = UDim2.new(0, 210, 0, 25)
+    StatusLabel.Position = UDim2.new(0, 115, 0, 42)
     StatusLabel.BackgroundTransparency = 1
-    StatusLabel.Text = "✅ Conectado | v13.0 ULTRA+"
-    StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
+    StatusLabel.Text = "✅ Online | v13.5 ULTRA+"
+    StatusLabel.TextColor3 = Colors.Success
     StatusLabel.TextScaled = true
     StatusLabel.Font = Enum.Font.Gotham
-    StatusLabel.Parent = Frame
+    StatusLabel.Parent = MainFrame
 
-    local VersionLabel = Instance.new("TextLabel")
-    VersionLabel.Size = UDim2.new(0, 200, 0, 20)
-    VersionLabel.Position = UDim2.new(0, 100, 0, 80)
-    VersionLabel.BackgroundTransparency = 1
-    VersionLabel.Text = "🚀 Features: +Fly, +Tracers, +AntiBan"
-    VersionLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
-    VersionLabel.TextScaled = true
-    VersionLabel.Font = Enum.Font.Gotham
-    VersionLabel.Parent = Frame
+    -- Features
+    local FeaturesLabel = Instance.new("TextLabel")
+    FeaturesLabel.Size = UDim2.new(0, 210, 0, 40)
+    FeaturesLabel.Position = UDim2.new(0, 115, 0, 70)
+    FeaturesLabel.BackgroundTransparency = 1
+    FeaturesLabel.Text = "⚡ Features: +15 Combat | +10 Techs\n🔥 Fly | NoClip | Farm & +Muito Mais!"
+    FeaturesLabel.TextColor3 = Colors.Warning
+    FeaturesLabel.TextScaled = true
+    FeaturesLabel.Font = Enum.Font.Gotham
+    FeaturesLabel.Parent = MainFrame
+    FeaturesLabel.TextWrapped = true
 
     task.spawn(function()
         local thumb, ready = Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size420x420)
@@ -172,48 +214,48 @@ local function criarVerificador()
 end
 criarVerificador()
 
--- ============= ESP & TRACERS SYSTEM =============
+-- ============= ESP & TRACERS SYSTEM AVANÇADO =============
 local function createESP(plr)
     if ESPObjects[plr] or plr == player then return end
 
     local box = Drawing.new("Square")
     box.Thickness = 2
     box.Filled = false
-    box.Color = Color3.fromRGB(255, 0, 0)
+    box.Color = Colors.Danger
     box.Transparency = 1
 
     local name = Drawing.new("Text")
     name.Size = 16
-    name.Color = Color3.fromRGB(255, 255, 255)
+    name.Color = Colors.Light
     name.Center = true
     name.Outline = true
 
     local health = Drawing.new("Text")
     health.Size = 14
-    health.Color = Color3.fromRGB(0, 255, 0)
+    health.Color = Colors.Success
     health.Center = true
     health.Outline = true
 
     local distance = Drawing.new("Text")
     distance.Size = 12
-    distance.Color = Color3.fromRGB(100, 200, 255)
+    distance.Color = Colors.Secondary
     distance.Center = true
     distance.Outline = true
 
     ESPObjects[plr] = {box = box, name = name, health = health, distance = distance}
-    debug("ESP criado para: " .. plr.DisplayName)
+    debug("✨ ESP criado para: " .. plr.DisplayName)
 end
 
 local function createTracer(plr)
     if TracerObjects[plr] or plr == player then return end
 
     local tracer = Drawing.new("Line")
-    tracer.Thickness = 1
-    tracer.Color = Color3.fromRGB(255, 0, 0)
-    tracer.Transparency = 1
+    tracer.Thickness = 1.5
+    tracer.Color = Colors.Danger
+    tracer.Transparency = 0.7
 
     TracerObjects[plr] = tracer
-    debug("Tracer criado para: " .. plr.DisplayName)
+    debug("📍 Tracer criado para: " .. plr.DisplayName)
 end
 
 local function removeESP(plr)
@@ -222,7 +264,6 @@ local function removeESP(plr)
             if obj then obj:Remove() end
         end
         ESPObjects[plr] = nil
-        debug("ESP removido para: " .. plr.DisplayName)
     end
 end
 
@@ -230,7 +271,6 @@ local function removeTracer(plr)
     if TracerObjects[plr] then
         TracerObjects[plr]:Remove()
         TracerObjects[plr] = nil
-        debug("Tracer removido para: " .. plr.DisplayName)
     end
 end
 
@@ -283,6 +323,7 @@ RunService.RenderStepped:Connect(function()
                 objs.box.Size = Vector2.new(2000 / pos.Z, 3000 / pos.Z)
                 objs.box.Position = Vector2.new(pos.X - objs.box.Size.X/2, pos.Y - objs.box.Size.Y/2)
                 objs.box.Visible = hum.Health > 0
+                objs.box.Color = hum.Health > hum.MaxHealth * 0.5 and Colors.Success or Colors.Danger
 
                 objs.name.Text = plr.DisplayName
                 objs.name.Position = Vector2.new(pos.X, pos.Y - 40)
@@ -318,12 +359,14 @@ RunService.RenderStepped:Connect(function()
 
             local char = plr.Character
             local head = char:FindFirstChild("Head")
-            if head then
+            local hum = char:FindFirstChild("Humanoid")
+            if head and hum then
                 local pos, onScreen = camera:WorldToViewportPoint(head.Position)
-                if onScreen then
+                if onScreen and hum.Health > 0 then
                     tracer.From = screenCenter
                     tracer.To = Vector2.new(pos.X, pos.Y)
                     tracer.Visible = true
+                    tracer.Color = hum.Health > hum.MaxHealth * 0.5 and Colors.Success or Colors.Danger
                 else
                     tracer.Visible = false
                 end
@@ -345,7 +388,7 @@ local function onCharacterAdded(char)
         for techName in pairs(TechCooldowns) do
             TechCooldowns[techName] = nil
         end
-        debug("Personagem morreu - Cooldowns resetados")
+        debug("💀 Personagem morreu!")
     end)
 end
 
@@ -358,10 +401,9 @@ RunService.Heartbeat:Connect(function(delta)
     if not char or not char:FindFirstChild("HumanoidRootPart") or not char:FindFirstChild("Humanoid") then return end
 
     local hrp, hum = char.HumanoidRootPart, char.Humanoid
-
     if not isAlive then return end
 
-    -- AUTO PARRY com Previsão
+    -- AUTO PARRY
     if Settings.AutoParry then
         local closestEnemy = nil
         local minDist = Settings.ParryDistance
@@ -382,18 +424,16 @@ RunService.Heartbeat:Connect(function(delta)
             local enemyHrp = closestEnemy.Character.HumanoidRootPart
             local velTowards = (hrp.Position - enemyHrp.Position).Unit:Dot(enemyHrp.Velocity.Unit)
             if velTowards > Settings.ParryVelocityThreshold then
-                if Settings.ParryPrediction then
-                    task.wait(0.01)  -- Pequeno delay para previsão
-                end
+                if Settings.ParryPrediction then task.wait(0.01) end
                 VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
                 task.wait(0.05)
                 VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
-                debug("Parry automático em: " .. closestEnemy.DisplayName)
+                debug("🛡️ Parry em: " .. closestEnemy.DisplayName)
             end
         end
     end
 
-    -- KILL AURA Otimizado
+    -- KILL AURA
     if Settings.KillAura then
         for _, enemy in ipairs(Players:GetPlayers()) do
             if enemy ~= player and enemy.Character and enemy.Character:FindFirstChild("HumanoidRootPart") and enemy.Character.Humanoid.Health > 0 then
@@ -414,15 +454,13 @@ RunService.Heartbeat:Connect(function(delta)
                         end
                     end
 
-                    -- Simular ataque com multiplicador (se possível, via remote exploit)
                     VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
-                    task.wait(0.02)  -- Reduzido para mais velocidade
+                    task.wait(0.02)
                     VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
                 end
             end
         end
     else
-        -- Restaurar hitboxes otimizado
         for part, size in pairs(originalHitboxSizes) do
             if part and part.Parent then
                 part.Size = size
@@ -433,7 +471,7 @@ RunService.Heartbeat:Connect(function(delta)
         activeEnemies = {}
     end
 
-    -- INFINITE STAMINA & JUMP
+    -- INFINITE STAMINA
     if Settings.InfiniteStamina then
         hum.WalkSpeed = Settings.WalkSpeed
         hum.JumpPower = Settings.JumpPower
@@ -446,9 +484,9 @@ RunService.Heartbeat:Connect(function(delta)
         hum:ChangeState(Enum.HumanoidStateType.GettingUp)
     end
 
-    -- ANTI-BAN (evitar detecção básica)
+    -- ANTI-BAN
     if Settings.AntiBan then
-        hum.WalkSpeed = math.min(hum.WalkSpeed, 16)  -- Limitar para valor normal se detectado
+        hum.WalkSpeed = math.min(hum.WalkSpeed, 16)
     end
 end)
 
@@ -459,6 +497,8 @@ local function toggleFly(enabled)
         if not hrp then return end
 
         flyConnection = RunService.RenderStepped:Connect(function()
+            if not Settings.Fly then return end
+            
             hrp.Velocity = Vector3.new(0, 0, 0)
             hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
 
@@ -474,11 +514,13 @@ local function toggleFly(enabled)
                 hrp.CFrame = hrp.CFrame + (moveDir.Unit * Settings.FlySpeed * 0.05)
             end
         end)
+        debug("✈️ Fly ativado!")
     else
         if flyConnection then
             flyConnection:Disconnect()
             flyConnection = nil
         end
+        debug("✈️ Fly desativado!")
     end
 end
 
@@ -507,7 +549,7 @@ local function executeTech(techName, key, delay1, action, delay2, cooldown)
     end
 
     task.delay(cooldown, function() TechCooldowns[techName] = nil end)
-    debug("Tech executada: " .. techName)
+    debug("⚡ Tech executada: " .. techName)
 end
 
 RunService.Heartbeat:Connect(function()
@@ -549,9 +591,9 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- ============= FARM SYSTEM =============
+-- ============= FARM SYSTEM OTIMIZADO =============
 task.spawn(function()
-    while task.wait(0.5) do  -- Otimizado: Delay reduzido para farm mais rápido
+    while task.wait(0.5) do
         if not (Settings.AutoTrashcan or Settings.AutoFarmKills) then continue end
 
         local char = getCharacter()
@@ -579,7 +621,7 @@ task.spawn(function()
                         VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
                         task.wait(0.1)
                         VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
-                        debug("Lixeira farmada")
+                        debug("🗑️ Lixeira farmada!")
                     end
                 end
             end
@@ -599,14 +641,16 @@ task.spawn(function()
                 local target = targets[1]
                 hrp.CFrame = target.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
                 task.wait(0.15)
-                debug("Indo para: " .. target.DisplayName)
+                debug("👊 Farmando: " .. target.DisplayName)
             end
         end
     end
 end)
 
--- ============= UI TABS =============
-local CombatTab = Window:MakeTab({Name = "⚔️ Combat"})
+-- ============= ABA COMBAT - SUPER ORGANIZADA =============
+local CombatTab = Window:MakeTab({Name = "⚔️ COMBAT PREMIUM"})
+
+CombatTab:AddSection("🛡️ PARRY SYSTEM")
 CombatTab:AddToggle({
     Name = "Auto Parry",
     Default = false,
@@ -622,16 +666,19 @@ CombatTab:AddSlider({
     Min = 5,
     Max = 30,
     Default = 15,
+    Increment = 1,
     Callback = function(v) Settings.ParryDistance = v end
 })
 CombatTab:AddSlider({
-    Name = "Parry Velocity Threshold",
+    Name = "Parry Velocity",
     Min = 0.1,
     Max = 1,
     Default = 0.5,
     Increment = 0.1,
     Callback = function(v) Settings.ParryVelocityThreshold = v end
 })
+
+CombatTab:AddSection("⚡ KILL AURA ULTIMATE")
 CombatTab:AddToggle({
     Name = "Kill Aura",
     Default = false,
@@ -642,6 +689,7 @@ CombatTab:AddSlider({
     Min = 10,
     Max = 50,
     Default = 20,
+    Increment = 1,
     Callback = function(v) Settings.AuraRange = v end
 })
 CombatTab:AddSlider({
@@ -649,18 +697,22 @@ CombatTab:AddSlider({
     Min = 10,
     Max = 30,
     Default = 15,
+    Increment = 1,
     Callback = function(v) Settings.HitboxSize = v end
 })
 CombatTab:AddSlider({
-    Name = "Aura Damage Multiplier",
+    Name = "Damage Multiplier",
     Min = 1,
-    Max = 3,
+    Max = 5,
     Default = 1.5,
     Increment = 0.1,
     Callback = function(v) Settings.AuraDamageMultiplier = v end
 })
 
-local VisualTab = Window:MakeTab({Name = "👁️ Visual"})
+-- ============= ABA VISUAL - DESIGN PREMIUM =============
+local VisualTab = Window:MakeTab({Name = "👁️ VISUAL PRO"})
+
+VisualTab:AddSection("📊 ESP AVANÇADO")
 VisualTab:AddToggle({
     Name = "Player ESP",
     Default = false,
@@ -676,7 +728,7 @@ VisualTab:AddToggle({
     end
 })
 VisualTab:AddToggle({
-    Name = "ESP Tracers",
+    Name = "ESP Tracers (Linhas)",
     Default = false,
     Callback = function(v)
         Settings.ESPTracers = v
@@ -692,12 +744,16 @@ VisualTab:AddToggle({
 VisualTab:AddSlider({
     Name = "ESP Distance",
     Min = 50,
-    Max = 500,
+    Max = 1000,
     Default = 300,
+    Increment = 50,
     Callback = function(v) Settings.ESPDistance = v end
 })
 
-local MovementTab = Window:MakeTab({Name = "✈️ Movement"})
+-- ============= ABA MOVEMENT - VELOCIDADE & VOOS =============
+local MovementTab = Window:MakeTab({Name = "✈️ MOVEMENT ELITE"})
+
+MovementTab:AddSection("🚀 VELOCIDADE")
 MovementTab:AddToggle({
     Name = "Infinite Stamina",
     Default = false,
@@ -706,19 +762,23 @@ MovementTab:AddToggle({
 MovementTab:AddSlider({
     Name = "Walk Speed",
     Min = 10,
-    Max = 50,
+    Max = 100,
     Default = 20,
+    Increment = 5,
     Callback = function(v) Settings.WalkSpeed = v end
 })
 MovementTab:AddSlider({
     Name = "Jump Power",
     Min = 50,
-    Max = 200,
+    Max = 300,
     Default = 50,
+    Increment = 10,
     Callback = function(v) Settings.JumpPower = v end
 })
+
+MovementTab:AddSection("✈️ FLY HACK")
 MovementTab:AddToggle({
-    Name = "Fly",
+    Name = "Fly Mode",
     Default = false,
     Callback = function(v)
         Settings.Fly = v
@@ -728,24 +788,30 @@ MovementTab:AddToggle({
 MovementTab:AddSlider({
     Name = "Fly Speed",
     Min = 10,
-    Max = 100,
+    Max = 200,
     Default = 50,
+    Increment = 10,
     Callback = function(v) Settings.FlySpeed = v end
 })
+
+MovementTab:AddSection("⚙️ PROTEÇÃO")
 MovementTab:AddToggle({
     Name = "Anti Ragdoll",
     Default = false,
     Callback = function(v) Settings.AntiRagdoll = v end
 })
 
-local TechsTab = Window:MakeTab({Name = "🔧 Techs"})
-TechsTab:AddSection("Garou Techs")
+-- ============= ABA TECHS - COM SECÇÕES SEPARADAS =============
+local TechsTab = Window:MakeTab({Name = "🔧 TECHS AUTOMÁTICAS"})
+
+TechsTab:AddSection("🐉 GAROU TECHS")
 TechsTab:AddToggle({Name = "Swirl Tech", Default = false, Callback = function(v) Settings.AutoSwirlTech = v end})
 TechsTab:AddToggle({Name = "Whirlwind Dash", Default = false, Callback = function(v) Settings.AutoWhirlwindDash = v end})
 TechsTab:AddToggle({Name = "Lethal Dash Extender", Default = false, Callback = function(v) Settings.AutoLethalDashExtender = v end})
 TechsTab:AddToggle({Name = "Twisted Dash", Default = false, Callback = function(v) Settings.AutoTwistedDash = v end})
 TechsTab:AddToggle({Name = "Uppercut Strike", Default = false, Callback = function(v) Settings.AutoUppercutStrike = v end})
-TechsTab:AddSection("Saitama Techs")
+
+TechsTab:AddSection("👨 SAITAMA TECHS")
 TechsTab:AddToggle({Name = "Countering Counter", Default = false, Callback = function(v) Settings.AutoCounteringCounter = v end})
 TechsTab:AddToggle({Name = "Surf Tech", Default = false, Callback = function(v) Settings.AutoSurfTech = v end})
 TechsTab:AddToggle({Name = "Ragdoll Shove Dash", Default = false, Callback = function(v) Settings.AutoRagdollShoveDash = v end})
@@ -754,14 +820,17 @@ TechsTab:AddToggle({Name = "Tactical Yeet", Default = false, Callback = function
 TechsTab:AddToggle({Name = "Uppercut Flick-Dash", Default = false, Callback = function(v) Settings.AutoUppercutFlickDash = v end})
 TechsTab:AddToggle({Name = "Uppercut Dash", Default = false, Callback = function(v) Settings.AutoUppercutDash = v end})
 
-local FarmTab = Window:MakeTab({Name = "🌾 Farm"})
+-- ============= ABA FARM =============
+local FarmTab = Window:MakeTab({Name = "🌾 FARM SYSTEM"})
+
+FarmTab:AddSection("💰 OPÇÕES DE FARM")
 FarmTab:AddToggle({
     Name = "Auto Farm Kills",
     Default = false,
     Callback = function(v) Settings.AutoFarmKills = v end
 })
 FarmTab:AddToggle({
-    Name = "Auto Trashcan",
+    Name = "Auto Trashcan (Lixeiras)",
     Default = false,
     Callback = function(v) Settings.AutoTrashcan = v end
 })
@@ -772,44 +841,85 @@ FarmTab:AddDropdown({
     Callback = function(v) Settings.AutoFarmMode = v end
 })
 
-local MiscTab = Window:MakeTab({Name = "🛠️ Misc"})
+FarmTab:AddSection("📊 INFO")
+local InfoLabel = FarmTab:AddLabel("Kills: 0 | Trashcan: 0")
+
+-- ============= ABA MISC - TUDO IMPORTANTE =============
+local MiscTab = Window:MakeTab({Name = "🛠️ MISC & CONFIG"})
+
+MiscTab:AddSection("🔒 SEGURANÇA")
 MiscTab:AddToggle({
-    Name = "Anti-Ban (Beta)",
+    Name = "Anti-Ban Protection (Beta)",
     Default = false,
     Callback = function(v) Settings.AntiBan = v end
 })
-MiscTab:AddButton({
-    Name = "Rejoin",
-    Callback = function()
-        game:GetService("TeleportService"):Teleport(game.PlaceId)
-    end
-})
+
+MiscTab:AddSection("⚙️ SYSTEM")
 MiscTab:AddToggle({
-    Name = "Debug Mode",
+    Name = "Debug Mode (Console)",
     Default = false,
     Callback = function(v) Settings.EnableDebug = v end
 })
+
+MiscTab:AddSection("🔧 AÇÕES RÁPIDAS")
 MiscTab:AddButton({
-    Name = "Clear All Cooldowns",
+    Name = "🔄 Rejoin Game",
+    Callback = function()
+        OrionLib:MakeNotification({Title = "Rejoin", Content = "Voltando ao jogo...", Time = 2})
+        game:GetService("TeleportService"):Teleport(game.PlaceId)
+    end
+})
+
+MiscTab:AddButton({
+    Name = "🧹 Clear All Cooldowns",
     Callback = function()
         for techName in pairs(TechCooldowns) do
             TechCooldowns[techName] = nil
         end
-        print("✅ Todos os cooldowns foram limpos!")
+        OrionLib:MakeNotification({Title = "Sucesso!", Content = "✅ Todos os cooldowns foram limpos!", Time = 2})
+        debug("Cooldowns limpos!")
     end
 })
+
 MiscTab:AddButton({
-    Name = "Reset All Settings",
+    Name = "🔄 Reset All Settings",
     Callback = function()
         for setting in pairs(Settings) do
             if type(Settings[setting]) == "boolean" then
                 Settings[setting] = false
             end
         end
-        print("✅ Todas as configurações foram resetadas!")
+        OrionLib:MakeNotification({Title = "Sucesso!", Content = "✅ Todas as configurações foram resetadas!", Time = 2})
+        debug("Configurações resetadas!")
     end
 })
 
+MiscTab:AddSection("ℹ️ INFORMAÇÕES")
+MiscTab:AddLabel("Versão: 13.5 ULTRA+")
+MiscTab:AddLabel("Library: Orion Premium Edition")
+MiscTab:AddLabel("Desenvolvido por: Kerbzinn")
+MiscTab:AddLabel("Status: ✅ Online & Funcional")
+
+-- ============= FINALIZANDO =============
 OrionLib:Init()
-print("✅ TSB Kerbzinn Hub V13.0 ULTRA+ carregado com sucesso!")
-print("📊 Features: ESP+Tracers, Kill Aura Avançado, Fly Hack, Infinite Stamina, All Techs, Auto Farm Otimizado, AntiBan, +Mais!")
+
+print("═══════════════════════════════════════════")
+print("✅ TSB KERBZINN HUB V13.5 CARREGADO COM SUCESSO!")
+print("═══════════════════════════════════════════")
+print("📊 FEATURES ATIVAS:")
+print("  ⚔️ Combat System (Parry + Kill Aura)")
+print("  👁️ ESP + Tracers")
+print("  ✈️ Fly + Movement")
+print("  🔧 12+ Techs Automáticas")
+print("  🌾 Farm System (Kills + Trashcan)")
+print("  🛡️ Anti-Ban Protection")
+print("  📈 Hitbox Modifier")
+print("═══════════════════════════════════════════")
+print("🎮 Aproveite o melhor hub de 2026!")
+print("═══════════════════════════════════════════")
+
+OrionLib:MakeNotification({
+    Title = "🔥 TSB HUB INICIADO!",
+    Content = "Bem-vindo ao melhor hub de TSB de 2026! Versão 13.5 ULTRA+ carregada.",
+    Time = 5
+})
