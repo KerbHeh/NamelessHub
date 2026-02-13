@@ -2,10 +2,10 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Orion/main/
 -- TSB Kerbzinn Hub V13.0 - 2026 (ULTRA OTIMIZADO & AVANÇADO)
 local OrionLib = loadstring(game:HttpGet('https://raw.githubusercontent.com/shlexware/Orion/main/source'))()
 local Window = OrionLib:MakeWindow({
-    Name = "TSB Kerbzinn Hub V13.0 - 2026 ULTRA+",
+    Name = "Nameless script",
     HidePremium = false,
     SaveConfig = true,
-    ConfigFolder = "TSBKerbzinn2026",
+    ConfigFolder = "TSB script ~by O_Pottencias",
     IntroEnabled = true,
     IntroText = "Carregando o hub MAIS OP e AVANÇADO de 2026... ⚡🔥"
 })
