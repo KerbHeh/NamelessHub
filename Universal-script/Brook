@@ -1,170 +1,779 @@
--- Brookhaven Admin HD - Fluent UI (Tamanho, Velocidade, Pulo)
--- Cole direto no executor
+-- ██████████████████████████████████████████████████████████
+--   Brookhaven Admin HD  ·  v4 ULTRA  ·  Fluent UI
+--   Tabs: Movimento | Jogador | Combate | Visual | Mundo | Misc | Config
+-- ██████████████████████████████████████████████████████████
 
-local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
-local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
-local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+-- ============================================================
+--  CARREGAMENTO DA LIB
+-- ============================================================
+local Fluent          = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager     = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager= loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
 
+-- ============================================================
+--  SERVIÇOS
+-- ============================================================
+local Players        = game:GetService("Players")
+local RunService     = game:GetService("RunService")
+local UserInput      = game:GetService("UserInputService")
+local TweenService   = game:GetService("TweenService")
+local Lighting       = game:GetService("Lighting")
+local HttpService    = game:GetService("HttpService")
+local VirtualUser    = game:GetService("VirtualUser")
+local StarterGui     = game:GetService("StarterGui")
+local LocalPlayer    = Players.LocalPlayer
+
+-- ============================================================
+--  JANELA PRINCIPAL
+-- ============================================================
 local Window = Fluent:CreateWindow({
-    Title = "Brookhaven Admin HD",
-    SubTitle = "Tamanho • Velocidade • Pulo",
-    TabWidth = 160,
-    Size = UDim2.fromOffset(580, 460),
-    Acrylic = true,          -- Blur (pode ser detectável em alguns jogos, mude pra false se precisar)
-    Theme = "Dark",
-    MinimizeKey = Enum.KeyCode.LeftControl
+    Title       = "Brookhaven Admin HD",
+    SubTitle    = "v4 ULTRA  ·  FE Safe",
+    TabWidth    = 170,
+    Size        = UDim2.fromOffset(680, 560),
+    Acrylic     = true,
+    Theme       = "Dark",
+    MinimizeKey = Enum.KeyCode.RightControl
 })
 
 local Tabs = {
-    Main = Window:AddTab({ Title = "Principal", Icon = "rocket" }),
-    Settings = Window:AddTab({ Title = "Configurações", Icon = "settings" })
+    Move    = Window:AddTab({ Title = "Movimento",  Icon = "zap"          }),
+    Player  = Window:AddTab({ Title = "Jogador",    Icon = "user"         }),
+    Combat  = Window:AddTab({ Title = "Combate",    Icon = "shield"       }),
+    Visual  = Window:AddTab({ Title = "Visual",     Icon = "eye"          }),
+    World   = Window:AddTab({ Title = "Mundo",      Icon = "globe"        }),
+    Misc    = Window:AddTab({ Title = "Misc",       Icon = "star"         }),
+    Config  = Window:AddTab({ Title = "Config",     Icon = "settings"     }),
 }
 
 local Options = Fluent.Options
 
--- =============================================
---          FUNÇÕES DE APLICAÇÃO
--- =============================================
+-- ============================================================
+--  SISTEMA DE CONEXÕES (evita memory leak)
+-- ============================================================
+local C = {}  -- tabela global de conexões
 
-local function applyCharacterChanges()
-    local char = game.Players.LocalPlayer.Character
-    if not char or not char:FindFirstChild("Humanoid") then return end
-    
-    local hum = char.Humanoid
-    
-    -- Velocidade
-    local speed = Options.WalkSpeed.Value
-    hum.WalkSpeed = speed
-    
-    -- Pulo
-    local jump = Options.JumpPower.Value
-    hum.JumpPower = jump
-    
-    -- Tamanho (escala FE)
-    local scale = Options.SizeScale.Value
-    
-    for _, v in pairs(char:GetChildren()) do
-        if v:IsA("BasePart") and v.Name ~= "HumanoidRootPart" then
-            v.Size = v.Size * scale  -- multiplica tamanho atual
-        elseif v:IsA("Accessory") then
-            local handle = v:FindFirstChild("Handle")
-            if handle then handle.Size = handle.Size * scale end
+local function conn(key, signal, fn)
+    if C[key] then C[key]:Disconnect() end
+    C[key] = signal:Connect(fn)
+end
+
+local function disconn(key)
+    if C[key] then C[key]:Disconnect(); C[key] = nil end
+end
+
+-- ============================================================
+--  ATALHOS
+-- ============================================================
+local function getChar()  return LocalPlayer.Character end
+local function getRoot()  local c=getChar() return c and c:FindFirstChild("HumanoidRootPart") end
+local function getHum()   local c=getChar() return c and c:FindFirstChildOfClass("Humanoid") end
+local function getMouse() return LocalPlayer:GetMouse() end
+
+local function notify(t, msg, dur)
+    Fluent:Notify({ Title = t, Content = msg, Duration = dur or 4 })
+end
+
+-- Escala correta (FE safe, sem deformar)
+local SCALE_NAMES = {"BodyHeightScale","BodyDepthScale","BodyWidthScale","HeadScale"}
+local function applyScale(s)
+    local h = getHum(); if not h then return end
+    for _, n in ipairs(SCALE_NAMES) do
+        local v = h:FindFirstChild(n); if v then v.Value = s end
+    end
+end
+
+-- Salva lighting original para restauração
+local ORIG_LIGHT = {
+    Brightness    = Lighting.Brightness,
+    ClockTime     = Lighting.ClockTime,
+    FogEnd        = Lighting.FogEnd,
+    FogColor      = Lighting.FogColor,
+    GlobalShadows = Lighting.GlobalShadows,
+    Ambient       = Lighting.Ambient,
+}
+
+-- Re-aplica tudo após respawn
+local function reapplyAll()
+    task.wait(1.5)
+    local h = getHum(); if not h then return end
+    if Options.WalkSpeed  then h.WalkSpeed  = Options.WalkSpeed.Value  end
+    if Options.JumpPower  then h.JumpPower  = Options.JumpPower.Value
+                               h.JumpHeight = Options.JumpPower.Value  end
+    if Options.SizeScale  then applyScale(Options.SizeScale.Value)     end
+    if Options.GodMode and Options.GodMode.Value then
+        conn("god", RunService.Heartbeat, function()
+            local hm = getHum(); if hm then hm.Health = hm.MaxHealth end
+        end)
+    end
+end
+LocalPlayer.CharacterAdded:Connect(reapplyAll)
+
+-- ============================================================
+--  ███  ABA MOVIMENTO  ███
+-- ============================================================
+Tabs.Move:AddParagraph({ Title = "Movimento", Content = "Sliders em tempo real · Shift = sprint se ativo" })
+
+Tabs.Move:AddSlider("WalkSpeed", {
+    Title = "Velocidade (WalkSpeed)", Description = "Padrão: 16  |  Max: 500",
+    Default = 16, Min = 0, Max = 500, Rounding = 0,
+    Callback = function(v) local h=getHum() if h then h.WalkSpeed=v end end
+})
+
+Tabs.Move:AddSlider("JumpPower", {
+    Title = "Pulo (JumpPower)", Description = "Padrão: 50  |  Max: 500",
+    Default = 50, Min = 0, Max = 500, Rounding = 0,
+    Callback = function(v)
+        local h=getHum()
+        if h then h.JumpPower=v; h.JumpHeight=v end
+    end
+})
+
+Tabs.Move:AddSlider("SizeScale", {
+    Title = "Tamanho (Scale)", Description = "1 = normal  |  0.1 = micro  |  5 = gigante",
+    Default = 1, Min = 0.1, Max = 5, Rounding = 2,
+    Callback = function(v) applyScale(v) end
+})
+
+-- Sprint
+Tabs.Move:AddToggle("Sprint", {
+    Title = "Sprint (Shift)", Description = "Shift = 2× a velocidade configurada",
+    Default = false,
+    Callback = function(v)
+        disconn("sprint")
+        if not v then local h=getHum() if h then h.WalkSpeed=Options.WalkSpeed.Value end; return end
+        conn("sprint", RunService.Heartbeat, function()
+            local h=getHum(); if not h then return end
+            h.WalkSpeed = Options.WalkSpeed.Value * (UserInput:IsKeyDown(Enum.KeyCode.LeftShift) and 2.5 or 1)
+        end)
+    end
+})
+
+-- ✈ Fly (BodyVelocity + BodyGyro)
+local flySpeed = 50
+local FLY_ACTIVE = false
+
+local function startFly()
+    FLY_ACTIVE = true
+    local root = getRoot(); if not root then return end
+    local cam  = workspace.CurrentCamera
+
+    local bv = Instance.new("BodyVelocity"); bv.MaxForce = Vector3.new(1e5,1e5,1e5); bv.Velocity = Vector3.zero; bv.Parent = root
+    local bg = Instance.new("BodyGyro");    bg.MaxTorque= Vector3.new(1e5,1e5,1e5); bg.D=50;    bg.Parent = root
+
+    conn("fly", RunService.Heartbeat, function()
+        if not FLY_ACTIVE then bv:Destroy(); bg:Destroy(); disconn("fly"); return end
+        root = getRoot(); if not root then return end
+        local spd = flySpeed
+        local dir = Vector3.zero
+        if UserInput:IsKeyDown(Enum.KeyCode.W)      then dir = dir + cam.CFrame.LookVector   end
+        if UserInput:IsKeyDown(Enum.KeyCode.S)      then dir = dir - cam.CFrame.LookVector   end
+        if UserInput:IsKeyDown(Enum.KeyCode.A)      then dir = dir - cam.CFrame.RightVector  end
+        if UserInput:IsKeyDown(Enum.KeyCode.D)      then dir = dir + cam.CFrame.RightVector  end
+        if UserInput:IsKeyDown(Enum.KeyCode.Space)  then dir = dir + Vector3.new(0,1,0)       end
+        if UserInput:IsKeyDown(Enum.KeyCode.LeftControl) then dir = dir - Vector3.new(0,1,0) end
+        bv.Velocity = dir.Magnitude > 0 and dir.Unit*spd or Vector3.zero
+        bg.CFrame   = cam.CFrame
+    end)
+end
+
+local function stopFly()
+    FLY_ACTIVE = false
+    local root = getRoot()
+    if root then
+        for _, v in ipairs(root:GetChildren()) do
+            if v:IsA("BodyVelocity") or v:IsA("BodyGyro") then v:Destroy() end
         end
     end
-    
-    -- Ajusta Humanoid scales (mais natural)
-    local scales = {"BodyHeightScale", "BodyDepthScale", "BodyWidthScale", "HeadScale"}
-    for _, name in ipairs(scales) do
-        local s = hum:FindFirstChild(name)
-        if s then s.Value = scale end
-    end
-    
-    Fluent:Notify({
-        Title = "Aplicado!",
-        Content = "Vel: " .. speed .. " | Jump: " .. jump .. " | Size: x" .. scale,
-        Duration = 4
-    })
 end
 
-local function resetToDefault()
-    Options.WalkSpeed:SetValue(16)
-    Options.JumpPower:SetValue(50)
-    Options.SizeScale:SetValue(1)
-    applyCharacterChanges()
-end
-
--- =============================================
---               INTERFACE
--- =============================================
-
-Tabs.Main:AddParagraph({
-    Title = "Brookhaven Admin HD",
-    Content = "Controle seu tamanho, velocidade e pulo.\nClique em 'Aplicar' ou use os atalhos."
+Tabs.Move:AddToggle("Fly", {
+    Title = "Voar (Fly)", Description = "WASD = direção · Espaço = subir · Ctrl = descer",
+    Default = false,
+    Callback = function(v) if v then startFly() else stopFly() end end
 })
 
-Tabs.Main:AddSlider("WalkSpeed", {
-    Title = "Velocidade (WalkSpeed)",
-    Description = "Padrão: 16 | Máx recomendado: 200–500",
-    Default = 16,
-    Min = 0,
-    Max = 500,
-    Rounding = 0,
+Tabs.Move:AddSlider("FlySpeed", {
+    Title = "Velocidade do Voo", Description = "Padrão: 50",
+    Default = 50, Min = 5, Max = 300, Rounding = 0,
+    Callback = function(v) flySpeed = v end
+})
+
+Tabs.Move:AddButton({
+    Title = "Resetar Movimento",
+    Description = "Velocidade 16 · Pulo 50 · Tamanho 1",
+    Callback = function()
+        Options.WalkSpeed:SetValue(16)
+        Options.JumpPower:SetValue(50)
+        Options.SizeScale:SetValue(1)
+        notify("Reset", "Movimento restaurado ao padrão.")
+    end
+})
+
+-- ============================================================
+--  ███  ABA JOGADOR  ███
+-- ============================================================
+
+-- God Mode
+Tabs.Player:AddToggle("GodMode", {
+    Title = "God Mode", Description = "HP sempre no máximo",
+    Default = false,
     Callback = function(v)
-        -- Aplica em tempo real se quiser (opcional)
-        -- local hum = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
-        -- if hum then hum.WalkSpeed = v end
+        disconn("god")
+        if v then conn("god", RunService.Heartbeat, function()
+            local h=getHum(); if h then h.Health=h.MaxHealth end
+        end) end
     end
 })
 
-Tabs.Main:AddSlider("JumpPower", {
-    Title = "Pulo (JumpPower)",
-    Description = "Padrão: 50 | Valores altos = pulos insanos",
-    Default = 50,
-    Min = 0,
-    Max = 1000,
-    Rounding = 0
+-- Noclip
+Tabs.Player:AddToggle("Noclip", {
+    Title = "Noclip", Description = "Atravessa paredes e objetos",
+    Default = false,
+    Callback = function(v)
+        disconn("noclip")
+        if v then
+            conn("noclip", RunService.Stepped, function()
+                local c=getChar(); if not c then return end
+                for _,p in ipairs(c:GetDescendants()) do
+                    if p:IsA("BasePart") then p.CanCollide=false end
+                end
+            end)
+        else
+            local c=getChar(); if not c then return end
+            for _,p in ipairs(c:GetDescendants()) do
+                if p:IsA("BasePart") then p.CanCollide=true end
+            end
+        end
+    end
 })
 
-Tabs.Main:AddSlider("SizeScale", {
-    Title = "Tamanho (Scale)",
-    Description = "1 = normal | <1 pequeno | >1 gigante",
-    Default = 1,
-    Min = 0.1,
-    Max = 10,
-    Rounding = 2
+-- Anti-AFK
+Tabs.Player:AddToggle("AntiAFK", {
+    Title = "Anti-AFK", Description = "Nunca toma kick por inatividade",
+    Default = false,
+    Callback = function(v)
+        disconn("afk")
+        if v then
+            conn("afk", LocalPlayer.Idled, function()
+                VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+                task.wait(0.1)
+                VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+            end)
+        end
+    end
 })
 
-Tabs.Main:AddButton({
-    Title = "Aplicar Mudanças",
-    Description = "Aplica velocidade, pulo e tamanho",
-    Callback = applyCharacterChanges
+-- Invisible (local)
+Tabs.Player:AddToggle("Invisible", {
+    Title = "Invisibilidade Local", Description = "Só você fica invisível na sua tela",
+    Default = false,
+    Callback = function(v)
+        local c=getChar(); if not c then return end
+        for _,p in ipairs(c:GetDescendants()) do
+            if p:IsA("BasePart") then p.LocalTransparencyModifier = v and 1 or 0 end
+        end
+    end
 })
 
-Tabs.Main:AddButton({
-    Title = "Resetar Tudo",
-    Description = "Volta para valores padrão",
-    Callback = resetToDefault
+-- Teleport para Spawn
+Tabs.Player:AddButton({
+    Title = "Teleport → Spawn",
+    Description = "Vai para o SpawnLocation do mapa",
+    Callback = function()
+        local root=getRoot()
+        local spawn=workspace:FindFirstChildOfClass("SpawnLocation")
+        if root and spawn then
+            root.CFrame = spawn.CFrame + Vector3.new(0,5,0)
+            notify("Teleport", "Chegou no Spawn!")
+        else
+            notify("Erro", "Spawn não encontrado no workspace.")
+        end
+    end
 })
 
--- Hotkeys rápidos
-local toggleGui = Tabs.Main:AddKeybind("ToggleGUI", {
-    Title = "Toggle Interface",
-    Mode = "Toggle",
-    Default = "F"
+-- Teleport para Cursor
+Tabs.Player:AddButton({
+    Title = "Teleport → Cursor",
+    Description = "Clique em qualquer ponto do mapa para teleportar",
+    Callback = function()
+        notify("Modo Clique", "Clique no chão para teleportar. ESC cancela.")
+        local tempConn
+        tempConn = UserInput.InputBegan:Connect(function(inp)
+            if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+                local mouse = getMouse()
+                local root  = getRoot()
+                if root and mouse.Target then
+                    root.CFrame = CFrame.new(mouse.Hit.Position + Vector3.new(0,5,0))
+                    notify("Teleport", "Teleportado!")
+                end
+                tempConn:Disconnect()
+            elseif inp.KeyCode == Enum.KeyCode.Escape then
+                tempConn:Disconnect()
+                notify("Cancelado", "Teleport cancelado.")
+            end
+        end)
+    end
 })
 
-toggleGui:OnClick(function()
-    Window:Minimize()  -- ou Window:Toggle() dependendo da versão
+-- Teleport para Jogador (dropdown dinâmico)
+local function getPlayerNames()
+    local names = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then table.insert(names, p.Name) end
+    end
+    if #names == 0 then names = {"(Nenhum jogador)"}end
+    return names
+end
+
+Tabs.Player:AddDropdown("TeleportTarget", {
+    Title   = "Teleport → Jogador",
+    Values  = getPlayerNames(),
+    Default = getPlayerNames()[1],
+    Multi   = false,
+})
+
+Tabs.Player:AddButton({
+    Title = "Ir até o Jogador Selecionado",
+    Callback = function()
+        local target = Options.TeleportTarget and Options.TeleportTarget.Value
+        local plr    = target and Players:FindFirstChild(target)
+        local root   = getRoot()
+        if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") and root then
+            root.CFrame = plr.Character.HumanoidRootPart.CFrame + Vector3.new(0,5,0)
+            notify("Teleport", "Chegou em "..plr.Name.."!")
+        else
+            notify("Erro", "Jogador não encontrado.")
+        end
+    end
+})
+
+-- Refresh lista de jogadores
+Tabs.Player:AddButton({
+    Title = "Atualizar Lista de Jogadores",
+    Callback = function()
+        if Options.TeleportTarget then
+            Options.TeleportTarget:SetValues(getPlayerNames())
+        end
+        notify("Atualizado", "Lista de jogadores atualizada.")
+    end
+})
+
+-- ============================================================
+--  ███  ABA COMBATE  ███
+-- ============================================================
+
+-- HitBox Extender
+Tabs.Combat:AddToggle("HitboxExtend", {
+    Title = "HitBox Extender", Description = "Aumenta o hitbox dos inimigos para acertar mais fácil",
+    Default = false,
+    Callback = function(v)
+        disconn("hitbox")
+        if not v then return end
+        conn("hitbox", RunService.Heartbeat, function()
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr == LocalPlayer then continue end
+                local c = plr.Character
+                if not c then continue end
+                local root = c:FindFirstChild("HumanoidRootPart")
+                if root then
+                    root.Size = v and Vector3.new(6,6,6) or Vector3.new(2,2,1)
+                    root.Transparency = 0.7
+                end
+            end
+        end)
+    end
+})
+
+-- Infinite Stamina (mantém stamina de jogos que usam isso)
+Tabs.Combat:AddToggle("InfiniteStamina", {
+    Title = "Stamina Infinita", Description = "Tenta manter stamina cheia (funciona em alguns jogos)",
+    Default = false,
+    Callback = function(v)
+        disconn("stamina")
+        if not v then return end
+        conn("stamina", RunService.Heartbeat, function()
+            local char = getChar(); if not char then return end
+            for _, val in ipairs(char:GetDescendants()) do
+                if val:IsA("NumberValue") and val.Name:lower():find("stamina") then
+                    val.Value = val.Value < 90 and 100 or val.Value
+                end
+            end
+        end)
+    end
+})
+
+-- ClickTP (teleporta ao clicar no player)
+Tabs.Combat:AddToggle("ClickTP", {
+    Title = "Click TP (clique em jogador)", Description = "Clique em outro jogador pra teleportar até ele",
+    Default = false,
+    Callback = function(v)
+        disconn("clicktp")
+        if not v then return end
+        conn("clicktp", UserInput.InputBegan, function(inp)
+            if inp.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+            if not (Options.ClickTP and Options.ClickTP.Value) then return end
+            local mouse = getMouse()
+            local root  = getRoot()
+            if not (mouse.Target and root) then return end
+            local hit = mouse.Target
+            local char = hit:FindFirstAncestorOfClass("Model")
+            if not char then return end
+            local plr = Players:GetPlayerFromCharacter(char)
+            if plr and plr ~= LocalPlayer then
+                local tRoot = char:FindFirstChild("HumanoidRootPart")
+                if tRoot then
+                    root.CFrame = tRoot.CFrame + Vector3.new(0,3,0)
+                    notify("ClickTP", "Teleportado para "..plr.Name)
+                end
+            end
+        end)
+    end
+})
+
+-- ============================================================
+--  ███  ABA VISUAL  ███
+-- ============================================================
+
+-- FullBright
+Tabs.Visual:AddToggle("FullBright", {
+    Title = "FullBright", Description = "Remove escuridão, névoa e sombras",
+    Default = false,
+    Callback = function(v)
+        if v then
+            Lighting.Brightness    = 10
+            Lighting.ClockTime     = 14
+            Lighting.FogEnd        = 1e9
+            Lighting.GlobalShadows = false
+            Lighting.Ambient       = Color3.fromRGB(255,255,255)
+        else
+            Lighting.Brightness    = ORIG_LIGHT.Brightness
+            Lighting.ClockTime     = ORIG_LIGHT.ClockTime
+            Lighting.FogEnd        = ORIG_LIGHT.FogEnd
+            Lighting.GlobalShadows = ORIG_LIGHT.GlobalShadows
+            Lighting.Ambient       = ORIG_LIGHT.Ambient
+        end
+    end
+})
+
+-- FOV
+Tabs.Visual:AddSlider("FOV", {
+    Title = "FOV", Description = "Padrão: 70",
+    Default = 70, Min = 30, Max = 120, Rounding = 0,
+    Callback = function(v)
+        workspace.CurrentCamera.FieldOfView = v
+    end
+})
+
+-- Mantém FOV após reset de câmera
+conn("camfov", workspace:GetPropertyChangedSignal("CurrentCamera"), function()
+    task.wait()
+    if Options.FOV then workspace.CurrentCamera.FieldOfView = Options.FOV.Value end
 end)
 
--- Auto-aplicar quando respawn (útil)
-game.Players.LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(1.5)
-    applyCharacterChanges()
-end)
+-- ESP completo
+local espBillboards = {}
 
--- =============================================
---             SAVE / INTERFACE MANAGER
--- =============================================
+local function clearESP()
+    for _, v in pairs(espBillboards) do pcall(function() v:Destroy() end) end
+    espBillboards = {}
+    for key in pairs(C) do
+        if key:sub(1,4) == "esp_" then disconn(key) end
+    end
+end
 
+local function buildESP()
+    clearESP()
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr == LocalPlayer then continue end
+        local setupChar = function(char)
+            if not char then return end
+            task.wait(1)
+            local root = char:FindFirstChild("HumanoidRootPart")
+            if not root then return end
+
+            local bb = Instance.new("BillboardGui")
+            bb.Adornee      = root
+            bb.AlwaysOnTop  = true
+            bb.Size         = UDim2.fromOffset(140, 52)
+            bb.StudsOffset  = Vector3.new(0, 3.5, 0)
+            bb.Parent       = root
+
+            local bg = Instance.new("Frame", bb)
+            bg.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+            bg.BackgroundTransparency = 0.4
+            bg.BorderSizePixel = 0
+            bg.Size = UDim2.fromScale(1, 1)
+            Instance.new("UICorner", bg).CornerRadius = UDim.new(0, 6)
+
+            local function label(text, color, size, y)
+                local lbl = Instance.new("TextLabel", bg)
+                lbl.Size                   = UDim2.new(1, 0, 0, size)
+                lbl.Position               = UDim2.fromOffset(0, y)
+                lbl.BackgroundTransparency = 1
+                lbl.TextColor3             = color
+                lbl.TextStrokeTransparency = 0.5
+                lbl.TextScaled             = true
+                lbl.Font                   = Enum.Font.GothamBold
+                lbl.Text                   = text
+                return lbl
+            end
+
+            local nameLbl = label(plr.DisplayName, Color3.fromRGB(255,220,80), 22, 4)
+            local hpLbl   = label("❤ ...", Color3.fromRGB(100,255,120), 18, 28)
+
+            conn("esp_"..plr.UserId, RunService.Heartbeat, function()
+                local hum = char:FindFirstChildOfClass("Humanoid")
+                if hum and hpLbl.Parent then
+                    local pct = math.floor(hum.Health/hum.MaxHealth*100)
+                    hpLbl.Text      = "❤ "..math.floor(hum.Health).."  ("..pct.."%)"
+                    hpLbl.TextColor3= Color3.fromRGB(
+                        math.floor(255*(1-pct/100)),
+                        math.floor(255*(pct/100)),
+                        60
+                    )
+                end
+            end)
+
+            table.insert(espBillboards, bb)
+        end
+
+        setupChar(plr.Character)
+        plr.CharacterAdded:Connect(setupChar)
+    end
+end
+
+Tabs.Visual:AddToggle("ESP", {
+    Title = "ESP  (Nome + HP + cor por vida)", Description = "Cor verde = cheio · vermelho = quase morto",
+    Default = false,
+    Callback = function(v)
+        if v then
+            buildESP()
+            conn("esp_added",   Players.PlayerAdded,   function(p)
+                p.CharacterAdded:Connect(function() task.wait(1); buildESP() end)
+            end)
+            conn("esp_removed", Players.PlayerRemoving, function() task.wait(0.5); buildESP() end)
+        else
+            clearESP()
+            disconn("esp_added"); disconn("esp_removed")
+        end
+    end
+})
+
+-- Crosshair customizado
+Tabs.Visual:AddToggle("Crosshair", {
+    Title = "Crosshair", Description = "Mira branca no centro da tela",
+    Default = false,
+    Callback = function(v)
+        local existing = LocalPlayer.PlayerGui:FindFirstChild("_AdminCH")
+        if existing then existing:Destroy() end
+        if not v then return end
+
+        local sg = Instance.new("ScreenGui", LocalPlayer.PlayerGui)
+        sg.Name = "_AdminCH"; sg.ResetOnSpawn = false; sg.IgnoreGuiInset = true
+
+        local function bar(w,h,x,y)
+            local f = Instance.new("Frame", sg)
+            f.BackgroundColor3 = Color3.fromRGB(255,255,255)
+            f.BorderSizePixel  = 0
+            f.Size             = UDim2.fromOffset(w,h)
+            f.Position         = UDim2.new(.5,x-.5*w,.5,y-.5*h)
+        end
+        bar(14,2,0,0); bar(2,14,0,0)  -- cruz
+    end
+})
+
+-- Tracer (linha do HRP ao chão de outros jogadores)
+Tabs.Visual:AddToggle("Tracers", {
+    Title = "Tracers", Description = "Linha saindo da tela até cada jogador",
+    Default = false,
+    Callback = function(v)
+        disconn("tracers")
+        local sg = LocalPlayer.PlayerGui:FindFirstChild("_AdminTracers")
+        if sg then sg:Destroy() end
+        if not v then return end
+
+        local tracerGui = Instance.new("ScreenGui", LocalPlayer.PlayerGui)
+        tracerGui.Name = "_AdminTracers"; tracerGui.ResetOnSpawn=false; tracerGui.IgnoreGuiInset=true
+
+        conn("tracers", RunService.RenderStepped, function()
+            -- limpa frames antigos
+            for _, f in ipairs(tracerGui:GetChildren()) do f:Destroy() end
+
+            local cam  = workspace.CurrentCamera
+            local vpS  = cam.ViewportSize
+            local orig = Vector2.new(vpS.X/2, vpS.Y)
+
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr == LocalPlayer then continue end
+                local char = plr.Character
+                if not char then continue end
+                local root = char:FindFirstChild("HumanoidRootPart")
+                if not root then continue end
+
+                local screenPos, onScreen = cam:WorldToViewportPoint(root.Position)
+                if not onScreen then continue end
+
+                local dest  = Vector2.new(screenPos.X, screenPos.Y)
+                local delta = dest - orig
+                local len   = delta.Magnitude
+                local angle = math.atan2(delta.Y, delta.X)
+
+                local line  = Instance.new("Frame", tracerGui)
+                line.AnchorPoint        = Vector2.new(0, 0.5)
+                line.BackgroundColor3   = Color3.fromRGB(255, 80, 80)
+                line.BorderSizePixel    = 0
+                line.Rotation           = math.deg(angle)
+                line.Size               = UDim2.fromOffset(len, 2)
+                line.Position           = UDim2.fromOffset(orig.X, orig.Y)
+            end
+        end)
+    end
+})
+
+-- ============================================================
+--  ███  ABA MUNDO  ███
+-- ============================================================
+
+Tabs.World:AddSlider("Gravity", {
+    Title = "Gravidade", Description = "Padrão: 196.2",
+    Default = 196, Min = 0, Max = 500, Rounding = 0,
+    Callback = function(v) workspace.Gravity = v end
+})
+
+-- Chuva / Clima temático
+Tabs.World:AddDropdown("WeatherTheme", {
+    Title   = "Tema de Clima",
+    Values  = { "Normal", "Noite Fechada", "Pôr do Sol", "Madrugada", "Névoa Densa" },
+    Default = "Normal",
+    Callback = function(v)
+        if     v == "Normal"       then Lighting.ClockTime=14;  Lighting.FogEnd=1e6;    Lighting.Brightness=2;   Lighting.Ambient=Color3.fromRGB(100,100,100)
+        elseif v == "Noite Fechada"then Lighting.ClockTime=0;   Lighting.FogEnd=200;    Lighting.Brightness=0;   Lighting.Ambient=Color3.fromRGB(20,20,60)
+        elseif v == "Pôr do Sol"   then Lighting.ClockTime=18;  Lighting.FogEnd=800;    Lighting.Brightness=1.5; Lighting.Ambient=Color3.fromRGB(255,140,60)
+        elseif v == "Madrugada"    then Lighting.ClockTime=3;   Lighting.FogEnd=300;    Lighting.Brightness=0.2; Lighting.Ambient=Color3.fromRGB(30,30,80)
+        elseif v == "Névoa Densa"  then Lighting.ClockTime=10;  Lighting.FogEnd=80;     Lighting.Brightness=1;   Lighting.FogColor=Color3.fromRGB(200,200,200)
+        end
+    end
+})
+
+Tabs.World:AddButton({
+    Title = "Resetar Mundo",
+    Callback = function()
+        workspace.Gravity = 196.2
+        Options.Gravity:SetValue(196)
+        Lighting.Brightness    = ORIG_LIGHT.Brightness
+        Lighting.ClockTime     = ORIG_LIGHT.ClockTime
+        Lighting.FogEnd        = ORIG_LIGHT.FogEnd
+        Lighting.FogColor      = ORIG_LIGHT.FogColor
+        Lighting.GlobalShadows = ORIG_LIGHT.GlobalShadows
+        Lighting.Ambient       = ORIG_LIGHT.Ambient
+        notify("Reset", "Mundo restaurado ao original.")
+    end
+})
+
+-- ============================================================
+--  ███  ABA MISC  ███
+-- ============================================================
+
+-- Chat Spam (escreve mensagens automáticas no chat)
+Tabs.Misc:AddToggle("AutoChat", {
+    Title = "Auto Chat", Description = "Escreve mensagens automáticas no chat a cada X segundos",
+    Default = false,
+    Callback = function(v)
+        disconn("autochat")
+        if not v then return end
+        conn("autochat", RunService.Heartbeat, function()
+            -- Implementado via tick para não spammar todo frame
+        end)
+        task.spawn(function()
+            while Options.AutoChat and Options.AutoChat.Value do
+                local msg = Options.ChatMessage and Options.ChatMessage.Value or "oi"
+                game:GetService("ReplicatedStorage"):FindFirstChild("DefaultChatSystemChatEvents")
+                    and game:GetService("ReplicatedStorage").DefaultChatSystemChatEvents:FindFirstChild("SayMessageRequest")
+                    and game:GetService("ReplicatedStorage").DefaultChatSystemChatEvents.SayMessageRequest:FireServer(msg, "All")
+                task.wait(Options.ChatInterval and Options.ChatInterval.Value or 5)
+                if not (Options.AutoChat and Options.AutoChat.Value) then break end
+            end
+        end)
+    end
+})
+
+Tabs.Misc:AddInput("ChatMessage", {
+    Title = "Mensagem do Chat", Default = "brookhaven admin hd v4",
+    Placeholder = "Digite a mensagem...",
+})
+
+Tabs.Misc:AddSlider("ChatInterval", {
+    Title = "Intervalo do Chat (seg)", Default = 5, Min = 1, Max = 60, Rounding = 0,
+})
+
+-- Copia posição atual
+Tabs.Misc:AddButton({
+    Title = "Copiar Posição Atual",
+    Description = "Copia as coordenadas do personagem para a área de transferência",
+    Callback = function()
+        local root = getRoot()
+        if not root then notify("Erro", "Personagem não encontrado."); return end
+        local p = root.Position
+        local str = string.format("Vector3.new(%.2f, %.2f, %.2f)", p.X, p.Y, p.Z)
+        setclipboard(str)
+        notify("Copiado!", str, 5)
+    end
+})
+
+-- Delete Part (clique numa peça para deletá-la localmente)
+Tabs.Misc:AddToggle("DeletePart", {
+    Title = "Deletar Parte (clique)", Description = "Clique em qualquer objeto do mapa para deletar (local)",
+    Default = false,
+    Callback = function(v)
+        disconn("deletepart")
+        if not v then return end
+        conn("deletepart", UserInput.InputBegan, function(inp)
+            if inp.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+            if not (Options.DeletePart and Options.DeletePart.Value) then return end
+            local mouse = getMouse()
+            if mouse.Target then
+                -- Não deleta personagens
+                local plrChar = Players:GetPlayerFromCharacter(mouse.Target.Parent)
+                if plrChar then notify("Protegido", "Não é possível deletar jogadores."); return end
+                mouse.Target:Destroy()
+                notify("Deletado", "Parte removida localmente.")
+            end
+        end)
+    end
+})
+
+-- Info do Server
+Tabs.Misc:AddButton({
+    Title = "Info do Servidor",
+    Description = "Mostra ID do job, ping e jogadores",
+    Callback = function()
+        local ping = LocalPlayer:GetNetworkPing and math.floor(LocalPlayer:GetNetworkPing()*1000) or "N/A"
+        local info = string.format(
+            "Job ID: %s\nPing: %sms\nJogadores: %d/%d\nPlace ID: %d",
+            game.JobId:sub(1,12).."...",
+            tostring(ping),
+            #Players:GetPlayers(),
+            Players.MaxPlayers,
+            game.PlaceId
+        )
+        notify("Info do Servidor", info, 8)
+    end
+})
+
+-- ============================================================
+--  SAVE / INTERFACE MANAGER
+-- ============================================================
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
-
 SaveManager:IgnoreThemeSettings()
 SaveManager:SetIgnoreIndexes({})
-
 InterfaceManager:SetFolder("FluentHub")
-SaveManager:SetFolder("FluentHub/Brookhaven")
-
-InterfaceManager:BuildInterfaceSection(Tabs.Settings)
-SaveManager:BuildConfigSection(Tabs.Settings)
+SaveManager:SetFolder("FluentHub/BrookhavenV4")
+InterfaceManager:BuildInterfaceSection(Tabs.Config)
+SaveManager:BuildConfigSection(Tabs.Config)
 
 Window:SelectTab(1)
-
-Fluent:Notify({
-    Title = "Brookhaven Admin HD",
-    Content = "Carregado! Use os sliders e clique Aplicar.\nF = toggle janela",
-    Duration = 6
-})
-
 SaveManager:LoadAutoloadConfig()
+
+notify("Brookhaven Admin HD  v4 ULTRA", "Tudo carregado!\nRCtrl = minimizar | "..#Players:GetPlayers().." jogadores na server", 7)
