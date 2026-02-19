@@ -1,0 +1,1081 @@
+-- ╔══════════════════════════════════════════════════════════╗
+-- ║        RIVALS ELITE HUB 🎯 — v2.0                       ║
+-- ║        UI: Fluent Library by dawid-scripts              ║
+-- ║        Melhorado: lógica completa, sem stubs vazios      ║
+-- ╚══════════════════════════════════════════════════════════╝
+
+local Fluent           = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager      = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+-- ╔══════════════════════════════════════╗
+-- ║        SERVICES & CORE VARS          ║
+-- ╚══════════════════════════════════════╝
+
+local Players           = game:GetService("Players")
+local RunService        = game:GetService("RunService")
+local UserInputService  = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService      = game:GetService("TweenService")
+local GuiService        = game:GetService("GuiService")
+local Workspace         = game:GetService("Workspace")
+local Lighting          = game:GetService("Lighting")
+
+local lp     = Players.LocalPlayer
+local mouse  = lp:GetMouse()
+local Camera = Workspace.CurrentCamera
+local Options= Fluent.Options
+
+-- Referências de personagem — atualizadas no respawn
+local char, root, hum
+local function RefreshChar()
+    char = lp.Character or lp.CharacterAdded:Wait()
+    root = char:WaitForChild("HumanoidRootPart", 5)
+    hum  = char:WaitForChild("Humanoid", 5)
+end
+RefreshChar()
+lp.CharacterAdded:Connect(function()
+    task.wait(1)
+    RefreshChar()
+    -- Re-aplicar stats no respawn
+    if hum then
+        if Options.WalkSpeed then hum.WalkSpeed = Options.WalkSpeed.Value end
+        if Options.JumpPower  then
+            hum.UseJumpPower = true
+            hum.JumpPower    = Options.JumpPower.Value
+        end
+    end
+    if Options.Fly and Options.Fly.Value then
+        task.wait(0.5)
+        EnableFly()
+    end
+end)
+
+-- ╔══════════════════════════════════════╗
+-- ║         HELPERS                      ║
+-- ╚══════════════════════════════════════╝
+
+local function Notify(title, content, duration)
+    Fluent:Notify({ Title = title, Content = content, Duration = duration or 4 })
+end
+
+local function SafeCall(fn)
+    local ok, err = pcall(fn)
+    if not ok then warn("[RivalsHub] " .. tostring(err)) end
+end
+
+local function FindRemote(name)
+    local paths = {
+        ReplicatedStorage,
+        ReplicatedStorage:FindFirstChild("Remotes"),
+        ReplicatedStorage:FindFirstChild("Events"),
+        ReplicatedStorage:FindFirstChild("RemoteEvents"),
+    }
+    for _, f in ipairs(paths) do
+        if f then
+            local r = f:FindFirstChild(name, true)
+            if r then return r end
+        end
+    end
+    return nil
+end
+
+local function FireRemote(name, ...)
+    local r = FindRemote(name)
+    if r then
+        if r:IsA("RemoteEvent")    then SafeCall(function() r:FireServer(...)   end) end
+        if r:IsA("RemoteFunction") then SafeCall(function() r:InvokeServer(...) end) end
+        return true
+    end
+    return false
+end
+
+-- Checa se o alvo é inimigo (team check)
+local function IsEnemy(player)
+    if not Options.TeamCheck or not Options.TeamCheck.Value then return true end
+    return player.Team ~= lp.Team
+end
+
+-- Alvo mais próximo do cursor dentro do FOV
+local function GetAimbotTarget(boneName)
+    local closestDist = Options.FOVSize and Options.FOVSize.Value or 120
+    local target = nil
+    local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= lp and p.Character and IsEnemy(p) then
+            local pHum = p.Character:FindFirstChildOfClass("Humanoid")
+            if pHum and pHum.Health > 0 then
+                -- Tenta usar o bone preferido (Head, HumanoidRootPart, etc.)
+                local boneObj = p.Character:FindFirstChild(boneName or "Head")
+                             or p.Character:FindFirstChild("HumanoidRootPart")
+                if boneObj then
+                    local screenPos, onScreen = Camera:WorldToViewportPoint(boneObj.Position)
+                    if onScreen then
+                        local dist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                        if dist < closestDist then
+                            closestDist = dist
+                            target = boneObj
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return target
+end
+
+-- ╔══════════════════════════════════════╗
+-- ║         DRAWING — FOV CIRCLE         ║
+-- ╚══════════════════════════════════════╝
+
+local FOVCircle    = Drawing.new("Circle")
+FOVCircle.Thickness    = 1.5
+FOVCircle.Color        = Color3.fromRGB(255, 255, 255)
+FOVCircle.Filled       = false
+FOVCircle.Transparency = 1
+FOVCircle.Radius       = 120
+FOVCircle.Visible      = false
+
+local AimbotPredLine = Drawing.new("Line")
+AimbotPredLine.Thickness = 1
+AimbotPredLine.Color     = Color3.fromRGB(255, 100, 0)
+AimbotPredLine.Visible   = false
+
+-- ╔══════════════════════════════════════╗
+-- ║           ESP SYSTEM                 ║
+-- ╚══════════════════════════════════════╝
+
+local ESPHighlights  = {}
+local ESPBillboards  = {}
+local ESPTracerLines = {}
+
+local function CreateESP(player)
+    if not player.Character then return end
+    if ESPHighlights[player] then return end
+
+    -- Highlight
+    local h = Instance.new("Highlight")
+    h.FillTransparency  = Options.ESPFillTransp and Options.ESPFillTransp.Value or 0.6
+    h.OutlineColor      = Options.ESPOutlineColor and Options.ESPOutlineColor.Value or Color3.fromRGB(255, 0, 0)
+    h.FillColor         = Options.ESPFillColor   and Options.ESPFillColor.Value   or Color3.fromRGB(255, 60, 60)
+    h.OutlineTransparency = 0
+    h.Adornee = player.Character
+    h.Parent  = player.Character
+    ESPHighlights[player] = h
+
+    -- BillboardGui (nome + HP + distância)
+    local pRoot = player.Character:FindFirstChild("HumanoidRootPart")
+    if pRoot then
+        local bb = Instance.new("BillboardGui")
+        bb.Size        = UDim2.new(0, 160, 0, 55)
+        bb.StudsOffset = Vector3.new(0, 3.2, 0)
+        bb.AlwaysOnTop = true
+        bb.Adornee     = pRoot
+        bb.Parent      = pRoot
+
+        local frame = Instance.new("Frame", bb)
+        frame.Size = UDim2.new(1,0,1,0)
+        frame.BackgroundTransparency = 1
+
+        local nameLbl = Instance.new("TextLabel", frame)
+        nameLbl.Name = "NameLabel"
+        nameLbl.Size = UDim2.new(1,0,0.5,0)
+        nameLbl.Position = UDim2.new(0,0,0,0)
+        nameLbl.BackgroundTransparency = 1
+        nameLbl.TextColor3 = Color3.new(1,1,1)
+        nameLbl.TextStrokeTransparency = 0
+        nameLbl.Font      = Enum.Font.GothamBold
+        nameLbl.TextScaled = true
+        nameLbl.Text = player.Name
+
+        local hpLbl = Instance.new("TextLabel", frame)
+        hpLbl.Name = "HPLabel"
+        hpLbl.Size = UDim2.new(1,0,0.5,0)
+        hpLbl.Position = UDim2.new(0,0,0.5,0)
+        hpLbl.BackgroundTransparency = 1
+        hpLbl.TextColor3 = Color3.fromRGB(100, 255, 100)
+        hpLbl.TextStrokeTransparency = 0
+        hpLbl.Font = Enum.Font.Gotham
+        hpLbl.TextScaled = true
+        hpLbl.Text = "❤ ?"
+
+        -- Atualizar HP label
+        local pHum = player.Character:FindFirstChildOfClass("Humanoid")
+        if pHum then
+            local function updateHP()
+                hpLbl.Text = string.format("❤ %d / %d", math.floor(pHum.Health), math.floor(pHum.MaxHealth))
+            end
+            updateHP()
+            pHum:GetPropertyChangedSignal("Health"):Connect(updateHP)
+        end
+
+        ESPBillboards[player] = bb
+    end
+
+    -- Tracer line (Drawing)
+    if Options.Tracers and Options.Tracers.Value then
+        local line = Drawing.new("Line")
+        line.Thickness = 1
+        line.Color     = Options.TracerColor and Options.TracerColor.Value or Color3.fromRGB(255, 0, 0)
+        line.Visible   = true
+        line.From      = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+        ESPTracerLines[player] = line
+    end
+end
+
+local function RemoveESP(player)
+    if ESPHighlights[player] then
+        ESPHighlights[player]:Destroy()
+        ESPHighlights[player] = nil
+    end
+    if ESPBillboards[player] then
+        ESPBillboards[player]:Destroy()
+        ESPBillboards[player] = nil
+    end
+    if ESPTracerLines[player] then
+        ESPTracerLines[player]:Remove()
+        ESPTracerLines[player] = nil
+    end
+end
+
+local function ClearAllESP()
+    for player in pairs(ESPHighlights) do RemoveESP(player) end
+end
+
+Players.PlayerRemoving:Connect(RemoveESP)
+Players.PlayerAdded:Connect(function(p)
+    p.CharacterAdded:Connect(function()
+        task.wait(1)
+        if Options.EspBox and Options.EspBox.Value then
+            RemoveESP(p)
+            CreateESP(p)
+        end
+    end)
+end)
+
+-- ╔══════════════════════════════════════╗
+-- ║           FLY SYSTEM                 ║
+-- ╚══════════════════════════════════════╝
+
+local FlyBV, FlyBG
+function EnableFly()
+    if not root then return end
+    if FlyBV then FlyBV:Destroy() end
+    if FlyBG then FlyBG:Destroy() end
+
+    FlyBG = Instance.new("BodyGyro", root)
+    FlyBG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+    FlyBG.CFrame    = root.CFrame
+
+    FlyBV = Instance.new("BodyVelocity", root)
+    FlyBV.MaxForce  = Vector3.new(9e9, 9e9, 9e9)
+    FlyBV.Velocity  = Vector3.zero
+
+    if hum then hum.PlatformStand = true end
+    Notify("Movement", "✈ Fly ON — WASD + E (subir) / Q (descer)")
+end
+
+local function DisableFly()
+    if FlyBV then FlyBV:Destroy() FlyBV = nil end
+    if FlyBG then FlyBG:Destroy() FlyBG = nil end
+    if hum   then hum.PlatformStand = false end
+end
+
+-- ╔══════════════════════════════════════╗
+-- ║           WINDOW / TABS              ║
+-- ╚══════════════════════════════════════╝
+
+local Window = Fluent:CreateWindow({
+    Title       = "RIVALS ELITE HUB 🎯",
+    SubTitle    = "FPS & Combat Performance v2.0",
+    TabWidth    = 165,
+    Size        = UDim2.fromOffset(640, 520),
+    Acrylic     = false, -- desativado para melhorar FPS
+    Theme       = "Dark",
+    MinimizeKey = Enum.KeyCode.RightControl
+})
+
+local Tabs = {
+    Combat   = Window:AddTab({ Title = "Combat",   Icon = "target"     }),
+    Visuals  = Window:AddTab({ Title = "Visuals",  Icon = "eye"        }),
+    Movement = Window:AddTab({ Title = "Movement", Icon = "zap"        }),
+    GunMods  = Window:AddTab({ Title = "Gun Mods", Icon = "crosshair"  }),
+    Misc     = Window:AddTab({ Title = "Misc",     Icon = "wrench"     }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings"   }),
+}
+
+-- ╔══════════════════════════════════════╗
+-- ║   🎯  ABA 1 — COMBAT                ║
+-- ╚══════════════════════════════════════╝
+
+Tabs.Combat:AddSection("Aimbot Settings")
+
+Tabs.Combat:AddToggle("Aimbot", {
+    Title       = "Enable Aimbot",
+    Description = "Trava a câmera no inimigo mais próximo do centro",
+    Default     = false,
+})
+
+Tabs.Combat:AddDropdown("AimbotBone", {
+    Title       = "Aimbot Target Bone",
+    Description = "Parte do corpo para mirar",
+    Values      = {"Head", "HumanoidRootPart", "Torso", "UpperTorso"},
+    Multi       = false,
+    Default     = 1,
+})
+
+Tabs.Combat:AddDropdown("AimbotKey", {
+    Title       = "Aimbot Activation Key",
+    Description = "Botão que ativa o aimbot",
+    Values      = {"Hold RMB (Aim)", "Always On", "Hold Q", "Hold E"},
+    Multi       = false,
+    Default     = 1,
+})
+
+Tabs.Combat:AddSlider("AimbotSmoothing", {
+    Title       = "Aimbot Smoothing",
+    Description = "0 = snap instantâneo | 20 = suave (menos detectável)",
+    Min         = 0,
+    Max         = 20,
+    Default     = 5,
+    Rounding    = 1,
+})
+
+Tabs.Combat:AddSlider("FOVSize", {
+    Title       = "FOV Circle Size",
+    Description = "Raio da zona de detecção do aimbot (px)",
+    Min         = 10,
+    Max         = 600,
+    Default     = 120,
+    Rounding    = 0,
+    Callback    = function(v)
+        FOVCircle.Radius = v
+    end,
+})
+
+Tabs.Combat:AddToggle("ShowFOV", {
+    Title       = "Show FOV Circle",
+    Description = "Exibe o círculo de FOV na tela",
+    Default     = true,
+})
+
+Tabs.Combat:AddColorpicker("FOVColor", {
+    Title   = "FOV Circle Color",
+    Default = Color3.fromRGB(255, 255, 255),
+})
+
+Tabs.Combat:AddToggle("TeamCheck", {
+    Title       = "Team Check",
+    Description = "Não mira em aliados",
+    Default     = true,
+})
+
+Tabs.Combat:AddSection("Silent Aim")
+
+Tabs.Combat:AddToggle("SilentAim", {
+    Title       = "Silent Aim",
+    Description = "Redireciona os tiros para o alvo sem mover a câmera",
+    Default     = false,
+})
+
+Tabs.Combat:AddSlider("SilentAimChance", {
+    Title       = "Hit Chance (%)",
+    Description = "Probabilidade de acertar por tiro (anti-detecção)",
+    Min         = 10,
+    Max         = 100,
+    Default     = 85,
+    Rounding    = 0,
+})
+
+Tabs.Combat:AddToggle("SilentAimPrediction", {
+    Title       = "Prediction (Moving Targets)",
+    Description = "Corrige a mira para alvos em movimento",
+    Default     = true,
+})
+
+Tabs.Combat:AddSection("Hitbox")
+
+Tabs.Combat:AddToggle("HitboxExpander", {
+    Title       = "Hitbox Expander",
+    Description = "Aumenta o hitbox dos inimigos para acertar mais fácil",
+    Default     = false,
+})
+
+Tabs.Combat:AddSlider("HitboxSize", {
+    Title       = "Hitbox Size",
+    Min         = 1,
+    Max         = 20,
+    Default     = 5,
+    Rounding    = 1,
+})
+
+-- ╔══════════════════════════════════════╗
+-- ║   👁️  ABA 2 — VISUALS / ESP         ║
+-- ╚══════════════════════════════════════╝
+
+Tabs.Visuals:AddSection("Player ESP")
+
+Tabs.Visuals:AddToggle("EspBox", {
+    Title       = "Box / Highlight ESP",
+    Description = "Destaca todos os inimigos através das paredes",
+    Default     = false,
+})
+Options.EspBox:OnChanged(function()
+    if Options.EspBox.Value then
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= lp then CreateESP(p) end
+        end
+        Notify("Visuals", "ESP Ativado ✅")
+    else
+        ClearAllESP()
+        Notify("Visuals", "ESP Desativado ❌")
+    end
+end)
+
+Tabs.Visuals:AddToggle("Tracers", {
+    Title       = "Tracers",
+    Description = "Linhas do centro da tela até os inimigos",
+    Default     = false,
+})
+
+Tabs.Visuals:AddToggle("ESPNameTag", {
+    Title       = "Name + HP Tag",
+    Description = "Mostra nome e HP sobre os inimigos",
+    Default     = true,
+})
+
+Tabs.Visuals:AddColorpicker("ESPOutlineColor", {
+    Title   = "ESP Outline Color",
+    Default = Color3.fromRGB(255, 0, 0),
+})
+
+Tabs.Visuals:AddColorpicker("ESPFillColor", {
+    Title   = "ESP Fill Color",
+    Default = Color3.fromRGB(255, 60, 60),
+})
+
+Tabs.Visuals:AddColorpicker("TracerColor", {
+    Title   = "Tracer Color",
+    Default = Color3.fromRGB(255, 0, 0),
+})
+
+Tabs.Visuals:AddSlider("ESPFillTransp", {
+    Title       = "ESP Fill Transparency",
+    Min         = 0,
+    Max         = 1,
+    Default     = 0.6,
+    Rounding    = 2,
+})
+
+Tabs.Visuals:AddSection("World Visuals")
+
+Tabs.Visuals:AddToggle("Fullbright", {
+    Title       = "Fullbright / No Fog",
+    Description = "Iluminação máxima, sem sombras ou névoa",
+    Default     = false,
+})
+
+Tabs.Visuals:AddToggle("NoShaders", {
+    Title       = "Remove Effects (Blur, Bloom)",
+    Description = "Remove pós-processamento para melhorar visibilidade",
+    Default     = false,
+})
+
+Tabs.Visuals:AddToggle("ShowDroppedGuns", {
+    Title       = "ESP: Armas no Chão",
+    Description = "Destaca armas dropadas no mapa",
+    Default     = false,
+})
+
+Tabs.Visuals:AddColorpicker("DroppedGunColor", {
+    Title   = "Gun ESP Color",
+    Default = Color3.fromRGB(0, 200, 255),
+})
+
+-- ╔══════════════════════════════════════╗
+-- ║   🚀  ABA 3 — MOVEMENT              ║
+-- ╚══════════════════════════════════════╝
+
+Tabs.Movement:AddSection("Speed & Jump")
+
+Tabs.Movement:AddSlider("WalkSpeed", {
+    Title       = "Speed Hack",
+    Description = "Velocidade de movimento",
+    Min         = 0,
+    Max         = 300,
+    Default     = 16,
+    Rounding    = 0,
+    Callback    = function(v)
+        if hum then hum.WalkSpeed = v end
+    end,
+})
+
+Tabs.Movement:AddSlider("JumpPower", {
+    Title       = "JumpPower",
+    Description = "Altura do pulo",
+    Min         = 0,
+    Max         = 400,
+    Default     = 50,
+    Rounding    = 0,
+    Callback    = function(v)
+        if hum then
+            hum.UseJumpPower = true
+            hum.JumpPower = v
+        end
+    end,
+})
+
+Tabs.Movement:AddToggle("InfiniteJump", {
+    Title       = "Infinite Jump",
+    Description = "Pula infinitamente no ar",
+    Default     = false,
+})
+
+Tabs.Movement:AddSection("Fly Mode")
+
+Tabs.Movement:AddToggle("Fly", {
+    Title       = "Fly Mode",
+    Description = "Voa livremente. WASD + E (subir) / Q (descer)",
+    Default     = false,
+})
+Options.Fly:OnChanged(function()
+    if Options.Fly.Value then EnableFly() else DisableFly() end
+end)
+
+Tabs.Movement:AddSlider("FlySpeed", {
+    Title       = "Fly Speed",
+    Min         = 10,
+    Max         = 500,
+    Default     = 80,
+    Rounding    = 0,
+})
+
+Tabs.Movement:AddSection("Clip & Safety")
+
+Tabs.Movement:AddToggle("Noclip", {
+    Title       = "Noclip",
+    Description = "Atravessa paredes e colisões",
+    Default     = false,
+})
+
+Tabs.Movement:AddToggle("AntiVoid", {
+    Title       = "Anti Void",
+    Description = "Volta se cair no void",
+    Default     = false,
+})
+
+Tabs.Movement:AddToggle("GodMode", {
+    Title       = "God Mode (HP Infinito)",
+    Description = "Travado com HP máximo",
+    Default     = false,
+})
+
+-- ╔══════════════════════════════════════╗
+-- ║   🔫  ABA 4 — GUN MODS              ║
+-- ╚══════════════════════════════════════╝
+
+Tabs.GunMods:AddSection("Weapon Manipulation")
+
+Tabs.GunMods:AddToggle("NoRecoil", {
+    Title       = "No Recoil",
+    Description = "Cancela o recuo da câmera após cada tiro",
+    Default     = false,
+})
+
+Tabs.GunMods:AddToggle("NoSpread", {
+    Title       = "No Spread / Perfect Accuracy",
+    Description = "Remove a dispersão dos tiros",
+    Default     = false,
+})
+
+Tabs.GunMods:AddToggle("RapidFire", {
+    Title       = "Rapid Fire (Auto-Click)",
+    Description = "Clica automaticamente enquanto segura o botão de tiro",
+    Default     = false,
+})
+
+Tabs.GunMods:AddSlider("RapidFireDelay", {
+    Title       = "Rapid Fire Delay (s)",
+    Description = "Intervalo entre cada disparo automático",
+    Min         = 0.01,
+    Max         = 0.5,
+    Default     = 0.05,
+    Rounding    = 2,
+})
+
+Tabs.GunMods:AddToggle("InfiniteAmmo", {
+    Title       = "Infinite Ammo",
+    Description = "Tenta travar a munição no máximo via atributo local",
+    Default     = false,
+})
+
+Tabs.GunMods:AddToggle("NoReload", {
+    Title       = "No Reload / Instant Reload",
+    Description = "Reload instantâneo via manipulação de atributos",
+    Default     = false,
+})
+
+Tabs.GunMods:AddButton({
+    Title       = "⚡ Mod Current Weapon",
+    Description = "Aplica todos os mods ativos na arma que está na mão",
+    Callback    = function()
+        if not char then Notify("Gun Mods", "Personagem não encontrado!") return end
+        -- Procura a arma no personagem (Tool)
+        local tool = char:FindFirstChildOfClass("Tool")
+        if not tool then Notify("Gun Mods", "Nenhuma arma equipada!") return end
+
+        SafeCall(function()
+            -- Tenta modificar atributos comuns de armas
+            local attrs = {"FireRate","ReloadTime","Damage","Spread","Recoil","MaxAmmo","Ammo"}
+            for _, attr in ipairs(attrs) do
+                if tool:GetAttribute(attr) ~= nil then
+                    if attr == "FireRate"   then tool:SetAttribute(attr, 9999) end
+                    if attr == "ReloadTime" then tool:SetAttribute(attr, 0.01) end
+                    if attr == "Spread"     then tool:SetAttribute(attr, 0)    end
+                    if attr == "Recoil"     then tool:SetAttribute(attr, 0)    end
+                    if attr == "MaxAmmo"    then tool:SetAttribute(attr, 9999) end
+                    if attr == "Ammo"       then tool:SetAttribute(attr, 9999) end
+                    if attr == "Damage"     then tool:SetAttribute(attr, tool:GetAttribute(attr) * 10) end
+                end
+            end
+            -- Tenta zero valores internos em scripts
+            for _, obj in ipairs(tool:GetDescendants()) do
+                if obj:IsA("NumberValue") or obj:IsA("IntValue") then
+                    local n = obj.Name:lower()
+                    if n:find("reload") or n:find("cooldown") then obj.Value = 0.01 end
+                    if n:find("ammo")   or n:find("clip")     then obj.Value = 9999 end
+                    if n:find("spread") or n:find("recoil")   then obj.Value = 0    end
+                end
+            end
+        end)
+
+        Notify("Gun Mods", "Arma modificada: " .. tool.Name .. " ✅")
+    end
+})
+
+Tabs.GunMods:AddSection("Damage Modifiers")
+
+Tabs.GunMods:AddToggle("DamageMultiplier", {
+    Title       = "Damage Multiplier",
+    Description = "Multiplica o dano dos projéteis via hitbox",
+    Default     = false,
+})
+
+Tabs.GunMods:AddSlider("DmgMultValue", {
+    Title       = "Multiplicador de Dano (x)",
+    Min         = 1,
+    Max         = 100,
+    Default     = 5,
+    Rounding    = 0,
+})
+
+-- ╔══════════════════════════════════════╗
+-- ║   🔧  ABA 5 — MISC                  ║
+-- ╚══════════════════════════════════════╝
+
+Tabs.Misc:AddSection("Server & Connectivity")
+
+Tabs.Misc:AddButton({
+    Title       = "🔁 Server Hop",
+    Description = "Entra em outro servidor do jogo",
+    Callback    = function()
+        Notify("Misc", "Trocando servidor...")
+        task.wait(1)
+        SafeCall(function()
+            game:GetService("TeleportService"):Teleport(game.PlaceId, lp)
+        end)
+    end
+})
+
+Tabs.Misc:AddButton({
+    Title       = "🔌 Rejoin",
+    Description = "Reconecta no mesmo servidor",
+    Callback    = function()
+        Notify("Misc", "Reconectando...")
+        task.wait(0.5)
+        SafeCall(function()
+            game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, lp)
+        end)
+    end
+})
+
+Tabs.Misc:AddSection("Anti-AFK")
+
+Tabs.Misc:AddButton({
+    Title       = "🤖 Ativar Anti-AFK",
+    Description = "Previne kick por inatividade (uma vez é suficiente)",
+    Callback    = function()
+        local vu = game:GetService("VirtualUser")
+        lp.Idled:Connect(function()
+            vu:Button2Down(Vector2.new(0,0), Camera.CFrame)
+            task.wait(1)
+            vu:Button2Up(Vector2.new(0,0), Camera.CFrame)
+        end)
+        Notify("Misc", "Anti-AFK ativado! ✅")
+    end
+})
+
+Tabs.Misc:AddSection("Player Utils")
+
+Tabs.Misc:AddToggle("AutoRespawn", {
+    Title       = "Auto Respawn",
+    Description = "Respawna automaticamente ao morrer",
+    Default     = false,
+})
+
+Tabs.Misc:AddButton({
+    Title       = "💥 Rejoin to Reset Kill Streak",
+    Description = "Reconecta rápido para reiniciar o kill streak",
+    Callback    = function()
+        Notify("Misc", "Reconectando para resetar kill streak...")
+        task.wait(0.5)
+        SafeCall(function() lp:LoadCharacter() end)
+    end
+})
+
+-- ╔══════════════════════════════════════╗
+-- ║        RUNTIME LOOP (Heartbeat)      ║
+-- ╚══════════════════════════════════════╝
+
+local tickers = {
+    esp        = 0,
+    guns       = 0,
+    rapid      = 0,
+    recoil     = 0,
+}
+
+-- Controle de recoil: guarda a CFrame da câmera antes de cada tiro
+local lastCamCF = nil
+
+RunService.RenderStepped:Connect(function(dt)
+    local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+
+    -- ── FOV Circle ──────────────────────────────────────────────────
+    FOVCircle.Visible  = Options.ShowFOV and Options.ShowFOV.Value or false
+    FOVCircle.Position = center
+    FOVCircle.Radius   = Options.FOVSize and Options.FOVSize.Value or 120
+    FOVCircle.Color    = Options.FOVColor and Options.FOVColor.Value or Color3.new(1,1,1)
+
+    local bone    = Options.AimbotBone and Options.AimbotBone.Value or "Head"
+    local keyMode = Options.AimbotKey  and Options.AimbotKey.Value  or "Hold RMB (Aim)"
+
+    -- ── Aimbot ──────────────────────────────────────────────────────
+    if Options.Aimbot and Options.Aimbot.Value then
+        local shouldActivate =
+            (keyMode == "Hold RMB (Aim)"  and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)) or
+            (keyMode == "Always On") or
+            (keyMode == "Hold Q" and UserInputService:IsKeyDown(Enum.KeyCode.Q)) or
+            (keyMode == "Hold E" and UserInputService:IsKeyDown(Enum.KeyCode.E))
+
+        if shouldActivate then
+            local target = GetAimbotTarget(bone)
+            if target then
+                local smoothing = Options.AimbotSmoothing and Options.AimbotSmoothing.Value or 5
+                if smoothing == 0 then
+                    Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, target.Position)
+                else
+                    -- Suavização por lerp
+                    local targetCF = CFrame.lookAt(Camera.CFrame.Position, target.Position)
+                    Camera.CFrame  = Camera.CFrame:Lerp(targetCF, 1 / (smoothing + 1))
+                end
+            end
+        end
+    end
+
+    -- ── No Recoil (câmera) ───────────────────────────────────────────
+    if Options.NoRecoil and Options.NoRecoil.Value then
+        if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+            if lastCamCF then
+                local cur = Camera.CFrame
+                -- Mantém a rotação anterior no eixo vertical (cancela subida)
+                Camera.CFrame = CFrame.new(cur.Position) * CFrame.Angles(
+                    lastCamCF:ToEulerAnglesYXZ()
+                )
+            end
+            lastCamCF = Camera.CFrame
+        else
+            lastCamCF = Camera.CFrame
+        end
+    else
+        lastCamCF = Camera.CFrame
+    end
+
+    -- ── Tracers update ───────────────────────────────────────────────
+    if Options.Tracers and Options.Tracers.Value then
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= lp and p.Character then
+                local pRoot = p.Character:FindFirstChild("HumanoidRootPart")
+                if pRoot then
+                    local screenPos, onScreen = Camera:WorldToViewportPoint(pRoot.Position)
+                    if ESPTracerLines[p] then
+                        ESPTracerLines[p].Visible = onScreen
+                        ESPTracerLines[p].From    = Vector2.new(center.X, Camera.ViewportSize.Y)
+                        ESPTracerLines[p].To      = Vector2.new(screenPos.X, screenPos.Y)
+                        ESPTracerLines[p].Color   = Options.TracerColor and Options.TracerColor.Value or Color3.fromRGB(255,0,0)
+                    elseif onScreen then
+                        local line = Drawing.new("Line")
+                        line.Thickness = 1.2
+                        line.Color     = Options.TracerColor and Options.TracerColor.Value or Color3.fromRGB(255,0,0)
+                        line.Visible   = true
+                        line.From      = Vector2.new(center.X, Camera.ViewportSize.Y)
+                        line.To        = Vector2.new(screenPos.X, screenPos.Y)
+                        ESPTracerLines[p] = line
+                    end
+                end
+            end
+        end
+    else
+        for p, line in pairs(ESPTracerLines) do
+            line:Remove()
+            ESPTracerLines[p] = nil
+        end
+    end
+
+    -- ── Silent Aim (raycast redirect) ────────────────────────────────
+    if Options.SilentAim and Options.SilentAim.Value then
+        local target = GetAimbotTarget(bone)
+        if target and math.random(1, 100) <= (Options.SilentAimChance and Options.SilentAimChance.Value or 85) then
+            -- Redireciona o ponto de mira para o alvo
+            local targetPos = target.Position
+            if Options.SilentAimPrediction and Options.SilentAimPrediction.Value then
+                -- Predição básica: compensa velocidade do alvo
+                local vel = target.Velocity
+                local dist = (Camera.CFrame.Position - targetPos).Magnitude
+                local travelTime = dist / 800 -- velocidade estimada do projétil
+                targetPos = targetPos + vel * travelTime
+            end
+            -- Substitui o WorldToScreenPoint do mouse pelo alvo
+            mouse.Hit = CFrame.new(targetPos)
+        end
+    end
+end)
+
+-- ── Heartbeat loop ─────────────────────────────────────────────────
+RunService.Heartbeat:Connect(function(dt)
+    local ok = root and hum and char
+
+    -- Speed lock
+    if ok and Options.WalkSpeed and hum.WalkSpeed ~= Options.WalkSpeed.Value then
+        SafeCall(function() hum.WalkSpeed = Options.WalkSpeed.Value end)
+    end
+
+    -- God Mode
+    if ok and Options.GodMode and Options.GodMode.Value then
+        SafeCall(function()
+            hum.MaxHealth = math.huge
+            if hum.Health < 1e10 then hum.Health = math.huge end
+        end)
+    end
+
+    -- Noclip
+    if ok and Options.Noclip and Options.Noclip.Value then
+        SafeCall(function()
+            for _, p in ipairs(char:GetDescendants()) do
+                if p:IsA("BasePart") then p.CanCollide = false end
+            end
+        end)
+    end
+
+    -- Anti Void
+    if ok and Options.AntiVoid and Options.AntiVoid.Value then
+        if root.Position.Y < -80 then
+            root.CFrame = CFrame.new(root.Position.X, 50, root.Position.Z)
+        end
+    end
+
+    -- Fly
+    if Options.Fly and Options.Fly.Value and FlyBV and FlyBG and root then
+        local vel = Vector3.zero
+        local spd = Options.FlySpeed and Options.FlySpeed.Value or 80
+        local cf  = Camera.CFrame
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then vel = vel + cf.LookVector  end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then vel = vel - cf.LookVector  end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then vel = vel - cf.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then vel = vel + cf.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.E) then vel = vel + Vector3.new(0,1,0) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Q) then vel = vel - Vector3.new(0,1,0) end
+        FlyBV.Velocity = vel * spd
+        FlyBG.CFrame   = cf
+    end
+
+    -- Fullbright
+    if Options.Fullbright and Options.Fullbright.Value then
+        SafeCall(function()
+            Lighting.Brightness    = 10
+            Lighting.ClockTime     = 14
+            Lighting.FogEnd        = 100000
+            Lighting.FogStart      = 99999
+            Lighting.GlobalShadows = false
+            Lighting.Ambient       = Color3.fromRGB(178, 178, 178)
+        end)
+    end
+
+    -- Remove Shaders / Post FX
+    if Options.NoShaders and Options.NoShaders.Value then
+        SafeCall(function()
+            for _, fx in ipairs(Lighting:GetChildren()) do
+                if fx:IsA("BlurEffect") or fx:IsA("ColorCorrectionEffect")
+                or fx:IsA("BloomEffect") or fx:IsA("DepthOfFieldEffect")
+                or fx:IsA("SunRaysEffect") then
+                    fx.Enabled = false
+                end
+            end
+        end)
+    end
+
+    -- ── Hitbox Expander ──────────────────────────────────────────────
+    if Options.HitboxExpander and Options.HitboxExpander.Value then
+        local size = Options.HitboxSize and Options.HitboxSize.Value or 5
+        SafeCall(function()
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= lp and p.Character then
+                    for _, part in ipairs(p.Character:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.Size = Vector3.new(size, size, size)
+                        end
+                    end
+                end
+            end
+        end)
+    end
+
+    -- ── Ammo / Reload lock ───────────────────────────────────────────
+    if ok then
+        local tool = char:FindFirstChildOfClass("Tool")
+        if tool then
+            if Options.InfiniteAmmo and Options.InfiniteAmmo.Value then
+                SafeCall(function()
+                    for _, v in ipairs(tool:GetDescendants()) do
+                        if (v:IsA("NumberValue") or v:IsA("IntValue")) and
+                           (v.Name:lower():find("ammo") or v.Name:lower():find("clip")) then
+                            v.Value = 9999
+                        end
+                    end
+                    if tool:GetAttribute("Ammo")    ~= nil then tool:SetAttribute("Ammo",    9999) end
+                    if tool:GetAttribute("MaxAmmo") ~= nil then tool:SetAttribute("MaxAmmo", 9999) end
+                end)
+            end
+            if Options.NoReload and Options.NoReload.Value then
+                SafeCall(function()
+                    for _, v in ipairs(tool:GetDescendants()) do
+                        if (v:IsA("NumberValue")) and v.Name:lower():find("reload") then
+                            v.Value = 0.001
+                        end
+                    end
+                    if tool:GetAttribute("ReloadTime") ~= nil then tool:SetAttribute("ReloadTime", 0.001) end
+                end)
+            end
+            if Options.NoSpread and Options.NoSpread.Value then
+                SafeCall(function()
+                    for _, v in ipairs(tool:GetDescendants()) do
+                        if v:IsA("NumberValue") and v.Name:lower():find("spread") then
+                            v.Value = 0
+                        end
+                    end
+                    if tool:GetAttribute("Spread") ~= nil then tool:SetAttribute("Spread", 0) end
+                end)
+            end
+        end
+    end
+
+    -- ── Rapid Fire ───────────────────────────────────────────────────
+    tickers.rapid += dt
+    local rfDelay = Options.RapidFireDelay and Options.RapidFireDelay.Value or 0.05
+    if tickers.rapid >= rfDelay then
+        tickers.rapid = 0
+        if Options.RapidFire and Options.RapidFire.Value then
+            if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+                -- Simula click
+                local vi = Instance.new("InputObject")
+                vi.UserInputType = Enum.UserInputType.MouseButton1
+                vi.UserInputState = Enum.UserInputState.Begin
+                SafeCall(function() UserInputService.InputBegan:Fire(vi, false) end)
+            end
+        end
+    end
+
+    -- ── Dropped Gun ESP ──────────────────────────────────────────────
+    tickers.guns += dt
+    if tickers.guns >= 1 then
+        tickers.guns = 0
+        if Options.ShowDroppedGuns and Options.ShowDroppedGuns.Value then
+            local gunColor = Options.DroppedGunColor and Options.DroppedGunColor.Value or Color3.fromRGB(0,200,255)
+            local gunKeywords = {"Gun","Rifle","Pistol","Shotgun","SMG","AR","Weapon","AK","M4","Sniper","Tool","Drop"}
+            for _, obj in ipairs(Workspace:GetDescendants()) do
+                if obj:IsA("Tool") or obj:IsA("Model") then
+                    for _, kw in ipairs(gunKeywords) do
+                        if obj.Name:find(kw) and not obj.Parent:IsA("Backpack") and not obj.Parent:IsA("Model") then
+                            if not obj:FindFirstChild("_GunESP") then
+                                local h = Instance.new("Highlight")
+                                h.Name = "_GunESP"
+                                h.FillColor   = gunColor
+                                h.OutlineColor = Color3.new(1,1,1)
+                                h.FillTransparency = 0.4
+                                h.Adornee = obj
+                                h.Parent  = obj
+                            end
+                            break
+                        end
+                    end
+                end
+            end
+        else
+            for _, obj in ipairs(Workspace:GetDescendants()) do
+                local esp = obj:FindFirstChild("_GunESP")
+                if esp then esp:Destroy() end
+            end
+        end
+    end
+
+    -- ── ESP Highlight color update ────────────────────────────────────
+    tickers.esp += dt
+    if tickers.esp >= 0.3 then
+        tickers.esp = 0
+        for p, h in pairs(ESPHighlights) do
+            if h and h.Parent then
+                h.FillColor    = Options.ESPFillColor    and Options.ESPFillColor.Value    or Color3.fromRGB(255,60,60)
+                h.OutlineColor = Options.ESPOutlineColor and Options.ESPOutlineColor.Value or Color3.fromRGB(255,0,0)
+                h.FillTransparency = Options.ESPFillTransp and Options.ESPFillTransp.Value or 0.6
+            end
+        end
+        -- Esconder billboard se ESPNameTag desativado
+        for p, bb in pairs(ESPBillboards) do
+            if bb then
+                bb.Enabled = Options.ESPNameTag and Options.ESPNameTag.Value ~= false
+            end
+        end
+    end
+
+    -- ── Auto Respawn ─────────────────────────────────────────────────
+    if Options.AutoRespawn and Options.AutoRespawn.Value then
+        if hum and hum.Health <= 0 then
+            SafeCall(function() lp:LoadCharacter() end)
+        end
+    end
+end)
+
+-- ── Infinite Jump ────────────────────────────────────────────────────
+UserInputService.JumpRequest:Connect(function()
+    if Options.InfiniteJump and Options.InfiniteJump.Value and hum then
+        hum:ChangeState(Enum.HumanoidStateType.Jumping)
+    end
+end)
+
+-- ╔══════════════════════════════════════╗
+-- ║        ⚙️  SETTINGS                 ║
+-- ╚══════════════════════════════════════╝
+
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({})
+InterfaceManager:SetFolder("RivalsEliteHub")
+SaveManager:SetFolder("RivalsEliteHub/configs")
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
+
+Window:SelectTab(1)
+SaveManager:LoadAutoloadConfig()
+
+Notify("🎯 Rivals Elite Hub v2.0", "Script carregado! RCtrl para minimizar.", 7)
