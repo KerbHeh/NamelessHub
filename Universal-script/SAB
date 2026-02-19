@@ -1,0 +1,1076 @@
+-- ╔══════════════════════════════════════════════════════════╗
+-- ║        STEAL A BRAINROT 🧠 — Hub v2.0                   ║
+-- ║        UI: Fluent Library by dawid-scripts              ║
+-- ║        Melhorado: lógica completa, sem stubs vazios      ║
+-- ╚══════════════════════════════════════════════════════════╝
+
+local Fluent           = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager      = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+-- ╔══════════════════════════════════════╗
+-- ║        SERVICES & CORE VARS          ║
+-- ╚══════════════════════════════════════╝
+
+local Players           = game:GetService("Players")
+local RunService        = game:GetService("RunService")
+local UserInputService  = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TeleportService   = game:GetService("TeleportService")
+local Workspace         = game:GetService("Workspace")
+local Lighting          = game:GetService("Lighting")
+
+local lp     = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+local Options= Fluent.Options
+
+-- Referências de personagem — atualizadas no respawn
+local char, root, hum
+local function RefreshChar()
+    char = lp.Character or lp.CharacterAdded:Wait()
+    root = char:WaitForChild("HumanoidRootPart", 5)
+    hum  = char:WaitForChild("Humanoid", 5)
+end
+RefreshChar()
+lp.CharacterAdded:Connect(function()
+    task.wait(1)
+    RefreshChar()
+    -- Re-aplicar speed/jump no respawn
+    if hum then
+        if Options.WalkSpeed then hum.WalkSpeed = Options.WalkSpeed.Value end
+        if Options.JumpPower  then
+            hum.UseJumpPower = true
+            hum.JumpPower    = Options.JumpPower.Value
+        end
+    end
+    if Options.Fly and Options.Fly.Value then
+        task.wait(0.5)
+        EnableFly()
+    end
+end)
+
+-- ╔══════════════════════════════════════╗
+-- ║         HELPER UTILITIES             ║
+-- ╚══════════════════════════════════════╝
+
+local function Notify(title, content, duration)
+    Fluent:Notify({ Title = title, Content = content, Duration = duration or 4 })
+end
+
+local function SafeCall(fn)
+    local ok, err = pcall(fn)
+    if not ok then warn("[BrainrotHub] " .. tostring(err)) end
+end
+
+local function FindRemote(name)
+    local paths = {
+        ReplicatedStorage,
+        ReplicatedStorage:FindFirstChild("Remotes"),
+        ReplicatedStorage:FindFirstChild("Events"),
+        ReplicatedStorage:FindFirstChild("RemoteEvents"),
+        ReplicatedStorage:FindFirstChild("Network"),
+    }
+    for _, folder in ipairs(paths) do
+        if folder then
+            local r = folder:FindFirstChild(name, true)
+            if r then return r end
+        end
+    end
+    return nil
+end
+
+local function FireRemote(name, ...)
+    local r = FindRemote(name)
+    if r then
+        if r:IsA("RemoteEvent")    then SafeCall(function() r:FireServer(...)   end) end
+        if r:IsA("RemoteFunction") then SafeCall(function() r:InvokeServer(...) end) end
+        return true
+    end
+    return false
+end
+
+local function DistTo(obj)
+    if not root then return math.huge end
+    local pos = obj:IsA("BasePart") and obj.Position
+             or (obj:IsA("Model") and obj.PrimaryPart and obj.PrimaryPart.Position)
+    if not pos then return math.huge end
+    return (root.Position - pos).Magnitude
+end
+
+-- Retorna o leaderstats value de um jogador (ex: "Brainrots", "Cash")
+local function GetStat(player, statName)
+    local ls = player:FindFirstChild("leaderstats")
+    if not ls then return 0 end
+    local s = ls:FindFirstChild(statName)
+    return s and s.Value or 0
+end
+
+-- Jogador com mais Brainrots / Cash
+local function GetRichestPlayer()
+    local best, bestVal = nil, -1
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= lp then
+            local val = GetStat(p, "Brainrots") + GetStat(p, "Cash") + GetStat(p, "Coins")
+            if val > bestVal then bestVal = val best = p end
+        end
+    end
+    return best
+end
+
+-- Jogador mais próximo
+local function GetNearestPlayer()
+    local best, bestDist = nil, math.huge
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= lp and p.Character then
+            local pRoot = p.Character:FindFirstChild("HumanoidRootPart")
+            if pRoot then
+                local d = (root.Position - pRoot.Position).Magnitude
+                if d < bestDist then bestDist = d best = p end
+            end
+        end
+    end
+    return best
+end
+
+-- ╔══════════════════════════════════════╗
+-- ║           ESP SYSTEM                 ║
+-- ╚══════════════════════════════════════╝
+
+local ESPObjects = {}
+
+local function AddESP(obj, fillColor, outlineColor, tag)
+    if ESPObjects[obj] then return end
+    local h = Instance.new("Highlight")
+    h.FillColor         = fillColor or Color3.fromRGB(255, 60, 60)
+    h.OutlineColor      = outlineColor or Color3.fromRGB(255, 255, 255)
+    h.FillTransparency  = 0.45
+    h.OutlineTransparency = 0
+    h.Adornee = obj
+    h.Parent  = obj
+    ESPObjects[obj] = { highlight = h, tag = tag }
+
+    -- BillboardGui com nome/distância
+    if obj:IsA("Model") or obj:IsA("BasePart") then
+        local adornPart = obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildOfClass("BasePart")) or obj
+        if adornPart then
+            local bb = Instance.new("BillboardGui")
+            bb.Size         = UDim2.new(0, 120, 0, 40)
+            bb.StudsOffset  = Vector3.new(0, 3, 0)
+            bb.AlwaysOnTop  = true
+            bb.Adornee      = adornPart
+            bb.Parent       = adornPart
+
+            local lbl = Instance.new("TextLabel", bb)
+            lbl.Size                = UDim2.new(1,0,1,0)
+            lbl.BackgroundTransparency = 1
+            lbl.TextColor3          = Color3.new(1,1,1)
+            lbl.TextStrokeTransparency = 0
+            lbl.Font                = Enum.Font.GothamBold
+            lbl.TextScaled          = true
+            lbl.Text                = obj.Name
+
+            ESPObjects[obj].billboard = bb
+            ESPObjects[obj].label    = lbl
+        end
+    end
+end
+
+local function RemoveESP(obj)
+    if ESPObjects[obj] then
+        if ESPObjects[obj].highlight then ESPObjects[obj].highlight:Destroy() end
+        if ESPObjects[obj].billboard then ESPObjects[obj].billboard:Destroy() end
+        ESPObjects[obj] = nil
+    end
+end
+
+local function ClearESPByTag(tag)
+    for obj, data in pairs(ESPObjects) do
+        if data.tag == tag then RemoveESP(obj) end
+    end
+end
+
+-- ╔══════════════════════════════════════╗
+-- ║           FLY SYSTEM                 ║
+-- ╚══════════════════════════════════════╝
+
+local FlyBV, FlyBG
+function EnableFly()
+    if not root then return end
+    if FlyBV then FlyBV:Destroy() end
+    if FlyBG then FlyBG:Destroy() end
+
+    FlyBG = Instance.new("BodyGyro", root)
+    FlyBG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+    FlyBG.CFrame    = root.CFrame
+
+    FlyBV = Instance.new("BodyVelocity", root)
+    FlyBV.MaxForce  = Vector3.new(9e9, 9e9, 9e9)
+    FlyBV.Velocity  = Vector3.zero
+
+    if hum then hum.PlatformStand = true end
+    Notify("Movement", "✈ Fly ON — WASD + E (subir) / Q (descer)")
+end
+
+local function DisableFly()
+    if FlyBV then FlyBV:Destroy() FlyBV = nil end
+    if FlyBG then FlyBG:Destroy() FlyBG = nil end
+    if hum   then hum.PlatformStand = false end
+end
+
+-- ╔══════════════════════════════════════╗
+-- ║           WINDOW / TABS              ║
+-- ╚══════════════════════════════════════╝
+
+local Window = Fluent:CreateWindow({
+    Title       = "STEAL A BRAINROT 🧠",
+    SubTitle    = "Ultimate Thief Edition v2.0",
+    TabWidth    = 165,
+    Size        = UDim2.fromOffset(620, 510),
+    Acrylic     = true,
+    Theme       = "Dark",
+    MinimizeKey = Enum.KeyCode.RightControl
+})
+
+local Tabs = {
+    Main     = Window:AddTab({ Title = "Auto Steal",  Icon = "hand"         }),
+    Upgrades = Window:AddTab({ Title = "Upgrades",    Icon = "trending-up"  }),
+    Movement = Window:AddTab({ Title = "Movement",    Icon = "zap"          }),
+    Teleport = Window:AddTab({ Title = "Teleports",   Icon = "map-pin"      }),
+    Visuals  = Window:AddTab({ Title = "Visuals/ESP", Icon = "eye"          }),
+    Misc     = Window:AddTab({ Title = "Exploits",    Icon = "box"          }),
+    Settings = Window:AddTab({ Title = "Settings",    Icon = "settings"     }),
+}
+
+-- ╔══════════════════════════════════════╗
+-- ║   🖐️  ABA 1 — AUTO STEAL & FARM     ║
+-- ╚══════════════════════════════════════╝
+
+Tabs.Main:AddSection("Thievery Automation")
+
+Tabs.Main:AddToggle("AutoSteal", {
+    Title       = "Auto Grab Brainrots (Loop)",
+    Description = "Coleta/rouba brainrots próximos automaticamente",
+    Default     = false,
+})
+
+Tabs.Main:AddSlider("StealRange", {
+    Title       = "Steal Radius",
+    Description = "Distância de detecção de brainrots",
+    Min         = 10,
+    Max         = 200,
+    Default     = 50,
+    Rounding    = 0,
+})
+
+Tabs.Main:AddToggle("AutoStealFromPlayers", {
+    Title       = "Auto Steal from Players",
+    Description = "Tenta roubar brainrots diretamente de outros jogadores",
+    Default     = false,
+})
+
+Tabs.Main:AddToggle("AutoRebirth", {
+    Title       = "Auto Rebirth (Instant)",
+    Description = "Faz rebirth automaticamente assim que disponível",
+    Default     = false,
+})
+
+Tabs.Main:AddToggle("AutoSell", {
+    Title       = "Auto Sell Brainrots",
+    Description = "Vende brainrots automaticamente a cada ciclo",
+    Default     = false,
+})
+
+Tabs.Main:AddToggle("AutoCollectDrops", {
+    Title       = "Auto Collect Drops (Chão)",
+    Description = "Pega qualquer item dropado no mapa automaticamente",
+    Default     = false,
+})
+
+Tabs.Main:AddSection("Priority Targeting")
+
+Tabs.Main:AddDropdown("StealPriority", {
+    Title       = "Prioridade de Roubo",
+    Description = "Ordem de alvo para o Auto Steal",
+    Values      = {"Mais Próximo", "Mais Rico (Leaderstats)", "Menor HP", "Aleatório"},
+    Multi       = false,
+    Default     = 1,
+})
+
+Tabs.Main:AddButton({
+    Title       = "🎯 Steal All Now",
+    Description = "Rouba tudo no raio definido instantaneamente",
+    Callback    = function()
+        if not root then Notify("Auto Steal", "Personagem não encontrado!") return end
+        local count = 0
+        local keywords = {"Brainrot","Drop","Loot","Item","Pickup","Rare","Mythic"}
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            for _, kw in ipairs(keywords) do
+                if obj.Name:find(kw) and DistTo(obj) <= 500 then
+                    local pos = obj:IsA("BasePart") and obj.Position
+                             or (obj:IsA("Model") and obj.PrimaryPart and obj.PrimaryPart.Position)
+                    if pos then
+                        root.CFrame = CFrame.new(pos + Vector3.new(0,3,0))
+                        task.wait(0.05)
+                        FireRemote("Grab",    obj)
+                        FireRemote("Steal",   obj)
+                        FireRemote("Collect", obj)
+                        FireRemote("PickUp",  obj)
+                        count += 1
+                    end
+                    break
+                end
+            end
+        end
+        Notify("Auto Steal", "Roubados: " .. count .. " brainrots!")
+    end
+})
+
+-- ╔══════════════════════════════════════╗
+-- ║   ⬆️  ABA 2 — UPGRADES              ║
+-- ╚══════════════════════════════════════╝
+
+Tabs.Upgrades:AddSection("Max Out Attributes")
+
+local upgradeList = {
+    { key = "Speed",      label = "Speed (Velocidade)"     },
+    { key = "Storage",    label = "Storage (Capacidade)"   },
+    { key = "StealRange", label = "Steal Range (Alcance)"  },
+    { key = "Strength",   label = "Strength (Força)"       },
+    { key = "Luck",       label = "Luck (Sorte / Rarity)"  },
+    { key = "Magnet",     label = "Magnet (Atração)"       },
+}
+
+for _, upg in ipairs(upgradeList) do
+    Tabs.Upgrades:AddToggle("Auto_" .. upg.key, {
+        Title       = "Auto Upgrade " .. upg.label,
+        Default     = false,
+    })
+end
+
+Tabs.Upgrades:AddSlider("UpgradeDelay", {
+    Title       = "Delay entre Upgrades (s)",
+    Description = "Intervalo entre cada compra de upgrade",
+    Min         = 0.1,
+    Max         = 5,
+    Default     = 0.5,
+    Rounding    = 1,
+})
+
+Tabs.Upgrades:AddButton({
+    Title       = "⚡ Max All Upgrades (Now)",
+    Description = "Tenta comprar todos os upgrades de uma vez",
+    Callback    = function()
+        local remoteNames = {
+            "UpgradeSpeed", "BuySpeed",
+            "UpgradeStorage", "BuyStorage",
+            "UpgradeRange", "BuyRange",
+            "UpgradeStrength", "BuyStrength",
+            "UpgradeLuck", "BuyLuck",
+            "UpgradeMagnet", "BuyMagnet",
+            "Upgrade", "BuyUpgrade", "PurchaseUpgrade", "MaxUpgrade",
+        }
+        local fired = 0
+        for _, name in ipairs(remoteNames) do
+            if FireRemote(name) then fired += 1 end
+        end
+        -- Tenta clicar botões de upgrade na GUI
+        local gui = lp:FindFirstChild("PlayerGui")
+        if gui then
+            for _, btn in ipairs(gui:GetDescendants()) do
+                if (btn:IsA("TextButton") or btn:IsA("ImageButton")) then
+                    local n = btn.Name:lower()
+                    if n:find("upgrade") or n:find("buy") or n:find("max") then
+                        SafeCall(function() btn.MouseButton1Click:Fire() end)
+                    end
+                end
+            end
+        end
+        Notify("Upgrades", "Upgrade disparado! Remotes: " .. fired)
+    end
+})
+
+-- ╔══════════════════════════════════════╗
+-- ║   🚀  ABA 3 — MOVEMENT              ║
+-- ╚══════════════════════════════════════╝
+
+Tabs.Movement:AddSection("Speed & Jump")
+
+Tabs.Movement:AddSlider("WalkSpeed", {
+    Title       = "WalkSpeed",
+    Description = "Velocidade de movimento",
+    Min         = 0,
+    Max         = 500,
+    Default     = 16,
+    Rounding    = 0,
+    Callback    = function(v)
+        if hum then hum.WalkSpeed = v end
+    end,
+})
+
+Tabs.Movement:AddSlider("JumpPower", {
+    Title       = "JumpPower",
+    Description = "Altura do pulo",
+    Min         = 0,
+    Max         = 400,
+    Default     = 50,
+    Rounding    = 0,
+    Callback    = function(v)
+        if hum then
+            hum.UseJumpPower = true
+            hum.JumpPower    = v
+        end
+    end,
+})
+
+Tabs.Movement:AddToggle("InfiniteJump", {
+    Title       = "Infinite Jump",
+    Description = "Pula infinitamente no ar",
+    Default     = false,
+})
+
+Tabs.Movement:AddSection("Flight")
+
+Tabs.Movement:AddToggle("Fly", {
+    Title       = "God Fly Mode",
+    Description = "Voa livremente. WASD + E (subir) / Q (descer)",
+    Default     = false,
+})
+Options.Fly:OnChanged(function()
+    if Options.Fly.Value then EnableFly() else DisableFly() end
+end)
+
+Tabs.Movement:AddSlider("FlySpeed", {
+    Title       = "Fly Speed",
+    Description = "Velocidade do voo",
+    Min         = 10,
+    Max         = 600,
+    Default     = 100,
+    Rounding    = 0,
+})
+
+Tabs.Movement:AddSection("Clip & Safety")
+
+Tabs.Movement:AddToggle("Noclip", {
+    Title       = "Noclip",
+    Description = "Atravessa paredes e colisões",
+    Default     = false,
+})
+
+Tabs.Movement:AddToggle("AntiVoid", {
+    Title       = "Anti Void",
+    Description = "Teleporta de volta se cair no void",
+    Default     = false,
+})
+
+Tabs.Movement:AddToggle("GodMode", {
+    Title       = "God Mode (Imortal)",
+    Description = "HP travado no máximo permanentemente",
+    Default     = false,
+})
+
+-- ╔══════════════════════════════════════╗
+-- ║   📍  ABA 4 — TELEPORTS             ║
+-- ╚══════════════════════════════════════╝
+
+Tabs.Teleport:AddSection("Quick Travel")
+
+Tabs.Teleport:AddButton({
+    Title       = "🏆 TP to Richest Player",
+    Description = "Teleporta até o jogador com mais brainrots/cash",
+    Callback    = function()
+        if not root then return end
+        local richest = GetRichestPlayer()
+        if richest and richest.Character then
+            local tRoot = richest.Character:FindFirstChild("HumanoidRootPart")
+            if tRoot then
+                root.CFrame = tRoot.CFrame + Vector3.new(0, 3, 4)
+                Notify("Teleport", "Indo até o mais rico: " .. richest.Name)
+                return
+            end
+        end
+        Notify("Teleport", "Jogador não encontrado!")
+    end
+})
+
+Tabs.Teleport:AddButton({
+    Title       = "🎯 TP to Nearest Player",
+    Description = "Teleporta até o jogador mais próximo",
+    Callback    = function()
+        if not root then return end
+        local nearest = GetNearestPlayer()
+        if nearest and nearest.Character then
+            local tRoot = nearest.Character:FindFirstChild("HumanoidRootPart")
+            if tRoot then
+                root.CFrame = tRoot.CFrame + Vector3.new(0, 3, 4)
+                Notify("Teleport", "Indo até: " .. nearest.Name)
+                return
+            end
+        end
+        Notify("Teleport", "Nenhum jogador encontrado!")
+    end
+})
+
+Tabs.Teleport:AddButton({
+    Title       = "🛡 Safe Zone (Céu)",
+    Description = "Sobe para fora do mapa para ficar seguro",
+    Callback    = function()
+        if root then
+            root.CFrame = CFrame.new(0, 500, 0)
+            Notify("Teleport", "Safe Zone ativada! ✅")
+        end
+    end
+})
+
+Tabs.Teleport:AddButton({
+    Title       = "🏠 TP ao Spawn",
+    Description = "Volta ao ponto de spawn do mapa",
+    Callback    = function()
+        if not root then return end
+        local spawn = Workspace:FindFirstChildWhichIsA("SpawnLocation", true)
+        if spawn then
+            root.CFrame = spawn.CFrame + Vector3.new(0, 5, 0)
+        else
+            root.CFrame = CFrame.new(0, 5, 0)
+        end
+        Notify("Teleport", "Voltou ao Spawn!")
+    end
+})
+
+Tabs.Teleport:AddSection("Player Teleport")
+
+local function GetPlayerList()
+    local list = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= lp then
+            local brainrots = GetStat(p, "Brainrots")
+            table.insert(list, p.Name .. (brainrots > 0 and (" [" .. brainrots .. "]") or ""))
+        end
+    end
+    return #list > 0 and list or {"(Nenhum jogador)"}
+end
+
+-- Mapeia label → nome real do player
+local function GetRealName(label)
+    return label:match("^([^%[]+)"):gsub("%s+$","")
+end
+
+local DropPlayer = Tabs.Teleport:AddDropdown("TPPlayer", {
+    Title   = "Selecionar Jogador Alvo",
+    Values  = GetPlayerList(),
+    Multi   = false,
+    Default = 1,
+})
+
+Tabs.Teleport:AddButton({
+    Title    = "⚡ Teleportar ao Selecionado",
+    Callback = function()
+        if not root then return end
+        local label = Options.TPPlayer and Options.TPPlayer.Value
+        if not label or label == "(Nenhum jogador)" then
+            Notify("Teleport", "Selecione um jogador!") return
+        end
+        local realName = GetRealName(label)
+        local target   = Players:FindFirstChild(realName)
+        local tRoot    = target and target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+        if tRoot then
+            root.CFrame = tRoot.CFrame + Vector3.new(0, 3, 4)
+            Notify("Teleport", "Teleportado para " .. realName)
+        else
+            Notify("Teleport", "Jogador sem personagem!")
+        end
+    end
+})
+
+Tabs.Teleport:AddButton({
+    Title    = "🔄 Atualizar Lista",
+    Callback = function()
+        DropPlayer:SetValues(GetPlayerList())
+        Notify("Teleport", "Lista atualizada com " .. #Players:GetPlayers() - 1 .. " jogadores")
+    end
+})
+
+Tabs.Teleport:AddToggle("AutoTPRichest", {
+    Title       = "Auto TP ao Mais Rico (Loop)",
+    Description = "Segue automaticamente o jogador mais rico do servidor",
+    Default     = false,
+})
+
+-- ╔══════════════════════════════════════╗
+-- ║   👁️  ABA 5 — VISUALS / ESP         ║
+-- ╚══════════════════════════════════════╝
+
+Tabs.Visuals:AddSection("ESP Settings")
+
+Tabs.Visuals:AddToggle("ShowBrainrots", {
+    Title       = "ESP: Brainrots Dropados",
+    Description = "Destaca todos os brainrots no mapa com roxo",
+    Default     = false,
+})
+
+Tabs.Visuals:AddToggle("ShowPlayers", {
+    Title       = "ESP: Jogadores (Alvos)",
+    Description = "Destaca todos os outros jogadores com vermelho + nametag",
+    Default     = false,
+})
+
+Tabs.Visuals:AddToggle("ShowDrops", {
+    Title       = "ESP: Drops Raros",
+    Description = "Destaca itens raros/loot no chão com dourado",
+    Default     = false,
+})
+
+Tabs.Visuals:AddColorpicker("ESPBrainrotColor", {
+    Title   = "Cor ESP Brainrots",
+    Default = Color3.fromRGB(180, 60, 255),
+})
+
+Tabs.Visuals:AddColorpicker("ESPPlayerColor", {
+    Title   = "Cor ESP Jogadores",
+    Default = Color3.fromRGB(255, 60, 60),
+})
+
+Tabs.Visuals:AddToggle("Fullbright", {
+    Title       = "Fullbright / No Fog",
+    Description = "Remove névoa e maximiza iluminação",
+    Default     = false,
+})
+
+Tabs.Visuals:AddToggle("ShowLeaderStats", {
+    Title       = "Mostrar Stats no ESP (Brainrots/Cash)",
+    Description = "Exibe leaderstats no nametag dos jogadores",
+    Default     = false,
+})
+
+-- ╔══════════════════════════════════════╗
+-- ║   📦  ABA 6 — EXPLOITS / MISC        ║
+-- ╚══════════════════════════════════════╝
+
+Tabs.Misc:AddSection("Server Abuse")
+
+Tabs.Misc:AddToggle("AutoWheel", {
+    Title       = "Auto Spin Wheel (Loop)",
+    Description = "Gira a roda de prêmios automaticamente",
+    Default     = false,
+})
+
+Tabs.Misc:AddButton({
+    Title       = "💎 Dupe Brainrot (Drop Glitch)",
+    Description = "Tenta duplicar o item na mão via reset de frame",
+    Callback    = function()
+        Window:Dialog({
+            Title   = "⚠️ Dupe — Atenção",
+            Content = "Esse método dropa o item e recarrega o personagem no mesmo frame.\nSe funcionar, você terá o item no chão E no inventário. Continuar?",
+            Buttons = {
+                {
+                    Title    = "✅ Tentar",
+                    Callback = function()
+                        FireRemote("DropItem")
+                        FireRemote("Drop")
+                        task.wait(0.04)
+                        lp:LoadCharacter()
+                        Notify("Exploits", "Dupe tentado! Verifique o inventário.")
+                    end
+                },
+                { Title = "❌ Cancelar", Callback = function() end }
+            }
+        })
+    end
+})
+
+Tabs.Misc:AddButton({
+    Title       = "🔁 Server Hop",
+    Description = "Troca para um novo servidor instantaneamente",
+    Callback    = function()
+        Notify("Misc", "Trocando de servidor...")
+        task.wait(1)
+        SafeCall(function() TeleportService:Teleport(game.PlaceId, lp) end)
+    end
+})
+
+Tabs.Misc:AddButton({
+    Title       = "🔌 Rejoin (Mesmo Servidor)",
+    Description = "Reconecta no mesmo servidor atual",
+    Callback    = function()
+        Notify("Misc", "Reconectando...")
+        task.wait(0.5)
+        SafeCall(function()
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, lp)
+        end)
+    end
+})
+
+Tabs.Misc:AddSection("Anti-AFK")
+
+Tabs.Misc:AddButton({
+    Title       = "🤖 Ativar Anti-AFK",
+    Description = "Previne kick por inatividade (uma vez é suficiente)",
+    Callback    = function()
+        local vu = game:GetService("VirtualUser")
+        lp.Idled:Connect(function()
+            vu:Button2Down(Vector2.new(0,0), Camera.CFrame)
+            task.wait(1)
+            vu:Button2Up(Vector2.new(0,0), Camera.CFrame)
+        end)
+        Notify("Misc", "Anti-AFK ativado! ✅")
+    end
+})
+
+-- ╔══════════════════════════════════════╗
+-- ║        RUNTIME LOOP (Heartbeat)      ║
+-- ╚══════════════════════════════════════╝
+
+local tickers = {
+    steal    = 0,
+    sell     = 0,
+    upgrade  = 0,
+    esp      = 0,
+    wheel    = 0,
+    autoTP   = 0,
+}
+
+local brainrotKeywords = {"Brainrot","Brain","Drop","Loot","Rare","Mythic","Common","Epic","Legendary","Pickup"}
+local dropKeywords     = {"Drop","Loot","Rare","Mythic","Legendary","Chest","Crate","Pickup"}
+
+RunService.Heartbeat:Connect(function(dt)
+    local ok = root and hum and char
+
+    -- ── Speed lock ──────────────────────────────────────────────────
+    if ok and Options.WalkSpeed and hum.WalkSpeed ~= Options.WalkSpeed.Value then
+        SafeCall(function() hum.WalkSpeed = Options.WalkSpeed.Value end)
+    end
+
+    -- ── God Mode ────────────────────────────────────────────────────
+    if ok and Options.GodMode and Options.GodMode.Value then
+        SafeCall(function()
+            hum.MaxHealth = math.huge
+            if hum.Health < 1e10 then hum.Health = math.huge end
+        end)
+    end
+
+    -- ── Noclip ──────────────────────────────────────────────────────
+    if ok and Options.Noclip and Options.Noclip.Value then
+        SafeCall(function()
+            for _, p in ipairs(char:GetDescendants()) do
+                if p:IsA("BasePart") then p.CanCollide = false end
+            end
+        end)
+    end
+
+    -- ── Anti Void ───────────────────────────────────────────────────
+    if ok and Options.AntiVoid and Options.AntiVoid.Value then
+        if root.Position.Y < -80 then
+            root.CFrame = CFrame.new(root.Position.X, 50, root.Position.Z)
+        end
+    end
+
+    -- ── Fly movement ─────────────────────────────────────────────────
+    if Options.Fly and Options.Fly.Value and FlyBV and FlyBG and root then
+        local vel = Vector3.zero
+        local spd = Options.FlySpeed and Options.FlySpeed.Value or 100
+        local cf  = Camera.CFrame
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then vel = vel + cf.LookVector  end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then vel = vel - cf.LookVector  end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then vel = vel - cf.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then vel = vel + cf.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.E) then vel = vel + Vector3.new(0,1,0) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Q) then vel = vel - Vector3.new(0,1,0) end
+        FlyBV.Velocity = vel * spd
+        FlyBG.CFrame   = cf
+    end
+
+    -- ── Fullbright ───────────────────────────────────────────────────
+    if Options.Fullbright and Options.Fullbright.Value then
+        SafeCall(function()
+            Lighting.Brightness    = 10
+            Lighting.ClockTime     = 14
+            Lighting.FogEnd        = 100000
+            Lighting.FogStart      = 99999
+            Lighting.GlobalShadows = false
+            Lighting.Ambient       = Color3.fromRGB(178,178,178)
+        end)
+    end
+
+    -- ────────────────────────────────────────────────────────────────
+    -- AUTO STEAL LOOP (0.15s)
+    tickers.steal += dt
+    if tickers.steal >= 0.15 then
+        tickers.steal = 0
+        local range = Options.StealRange and Options.StealRange.Value or 50
+
+        if ok and Options.AutoSteal and Options.AutoSteal.Value then
+            SafeCall(function()
+                for _, obj in ipairs(Workspace:GetDescendants()) do
+                    for _, kw in ipairs(brainrotKeywords) do
+                        if obj.Name:find(kw) and DistTo(obj) <= range then
+                            local pos = obj:IsA("BasePart") and obj.Position
+                                     or (obj:IsA("Model") and obj.PrimaryPart and obj.PrimaryPart.Position)
+                            if pos then
+                                root.CFrame = CFrame.new(pos + Vector3.new(0,2,0))
+                                FireRemote("Grab",    obj)
+                                FireRemote("Steal",   obj)
+                                FireRemote("Collect", obj)
+                                FireRemote("PickUp",  obj)
+                            end
+                            break
+                        end
+                    end
+                end
+            end)
+        end
+
+        -- Auto Steal from Players
+        if ok and Options.AutoStealFromPlayers and Options.AutoStealFromPlayers.Value then
+            SafeCall(function()
+                local priority = Options.StealPriority and Options.StealPriority.Value or "Mais Próximo"
+                local target
+                if priority == "Mais Rico (Leaderstats)" then
+                    target = GetRichestPlayer()
+                elseif priority == "Mais Próximo" then
+                    target = GetNearestPlayer()
+                elseif priority == "Aleatório" then
+                    local all = {}
+                    for _, p in ipairs(Players:GetPlayers()) do
+                        if p ~= lp then table.insert(all, p) end
+                    end
+                    target = all[math.random(1, math.max(1, #all))]
+                else
+                    -- Menor HP
+                    local lowestHP, best2 = math.huge, nil
+                    for _, p in ipairs(Players:GetPlayers()) do
+                        if p ~= lp and p.Character then
+                            local ph = p.Character:FindFirstChildOfClass("Humanoid")
+                            if ph and ph.Health < lowestHP then
+                                lowestHP = ph.Health best2 = p
+                            end
+                        end
+                    end
+                    target = best2
+                end
+
+                if target and target.Character then
+                    local tRoot = target.Character:FindFirstChild("HumanoidRootPart")
+                    if tRoot and (root.Position - tRoot.Position).Magnitude <= range then
+                        FireRemote("StealFrom",  target)
+                        FireRemote("Steal",      target)
+                        FireRemote("GrabPlayer", target)
+                    end
+                end
+            end)
+        end
+
+        -- Auto Collect Drops
+        if ok and Options.AutoCollectDrops and Options.AutoCollectDrops.Value then
+            SafeCall(function()
+                for _, obj in ipairs(Workspace:GetDescendants()) do
+                    for _, kw in ipairs(dropKeywords) do
+                        if obj.Name:find(kw) and DistTo(obj) <= range * 2 then
+                            local pos = obj:IsA("BasePart") and obj.Position
+                                     or (obj:IsA("Model") and obj.PrimaryPart and obj.PrimaryPart.Position)
+                            if pos then
+                                root.CFrame = CFrame.new(pos + Vector3.new(0,2,0))
+                                FireRemote("PickUp",  obj)
+                                FireRemote("Collect", obj)
+                            end
+                            break
+                        end
+                    end
+                end
+            end)
+        end
+    end
+
+    -- ────────────────────────────────────────────────────────────────
+    -- AUTO SELL (2s)
+    tickers.sell += dt
+    if tickers.sell >= 2 then
+        tickers.sell = 0
+        if ok and Options.AutoSell and Options.AutoSell.Value then
+            SafeCall(function()
+                local remotes = {"Sell","SellAll","SellBrainrot","SellItems","SellInventory"}
+                for _, name in ipairs(remotes) do FireRemote(name) end
+                local gui = lp:FindFirstChild("PlayerGui")
+                if gui then
+                    for _, btn in ipairs(gui:GetDescendants()) do
+                        if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Name:lower():find("sell") then
+                            SafeCall(function() btn.MouseButton1Click:Fire() end)
+                        end
+                    end
+                end
+            end)
+        end
+    end
+
+    -- ────────────────────────────────────────────────────────────────
+    -- AUTO REBIRTH (1.5s)
+    -- (handled separately below via dedicated spawn)
+
+    -- ────────────────────────────────────────────────────────────────
+    -- UPGRADES LOOP (0.5–5s)
+    tickers.upgrade += dt
+    local upgDelay = Options.UpgradeDelay and Options.UpgradeDelay.Value or 0.5
+    if tickers.upgrade >= upgDelay then
+        tickers.upgrade = 0
+        for _, upg in ipairs(upgradeList) do
+            local optKey = "Auto_" .. upg.key
+            if Options[optKey] and Options[optKey].Value then
+                SafeCall(function()
+                    FireRemote("Upgrade"  .. upg.key)
+                    FireRemote("Buy"      .. upg.key)
+                    FireRemote("Purchase" .. upg.key)
+                    FireRemote("Upgrade", upg.key)
+                end)
+            end
+        end
+    end
+
+    -- ────────────────────────────────────────────────────────────────
+    -- AUTO SPIN WHEEL (3s)
+    tickers.wheel += dt
+    if tickers.wheel >= 3 then
+        tickers.wheel = 0
+        if ok and Options.AutoWheel and Options.AutoWheel.Value then
+            SafeCall(function()
+                FireRemote("SpinWheel")
+                FireRemote("Wheel")
+                FireRemote("LuckyWheel")
+                local gui = lp:FindFirstChild("PlayerGui")
+                if gui then
+                    for _, btn in ipairs(gui:GetDescendants()) do
+                        if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Name:lower():find("spin") then
+                            SafeCall(function() btn.MouseButton1Click:Fire() end)
+                        end
+                    end
+                end
+            end)
+        end
+    end
+
+    -- ────────────────────────────────────────────────────────────────
+    -- AUTO TP RICHEST (2s)
+    tickers.autoTP += dt
+    if tickers.autoTP >= 2 then
+        tickers.autoTP = 0
+        if ok and Options.AutoTPRichest and Options.AutoTPRichest.Value then
+            SafeCall(function()
+                local richest = GetRichestPlayer()
+                if richest and richest.Character then
+                    local tRoot = richest.Character:FindFirstChild("HumanoidRootPart")
+                    if tRoot then
+                        root.CFrame = tRoot.CFrame + Vector3.new(0, 3, 4)
+                    end
+                end
+            end)
+        end
+    end
+
+    -- ────────────────────────────────────────────────────────────────
+    -- ESP UPDATE (0.5s)
+    tickers.esp += dt
+    if tickers.esp >= 0.5 then
+        tickers.esp = 0
+
+        -- ESP Brainrots
+        if Options.ShowBrainrots and Options.ShowBrainrots.Value then
+            local col = Options.ESPBrainrotColor and Options.ESPBrainrotColor.Value or Color3.fromRGB(180,60,255)
+            for _, obj in ipairs(Workspace:GetDescendants()) do
+                for _, kw in ipairs(brainrotKeywords) do
+                    if obj.Name:find(kw) and not obj:IsA("Humanoid") then
+                        AddESP(obj, col, Color3.new(1,1,1), "brainrot")
+                        break
+                    end
+                end
+            end
+        else
+            ClearESPByTag("brainrot")
+        end
+
+        -- ESP Players
+        if Options.ShowPlayers and Options.ShowPlayers.Value then
+            local col    = Options.ESPPlayerColor and Options.ESPPlayerColor.Value or Color3.fromRGB(255,60,60)
+            local showStats = Options.ShowLeaderStats and Options.ShowLeaderStats.Value
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= lp and p.Character then
+                    AddESP(p.Character, col, Color3.new(1,1,1), "player")
+                    -- Atualizar label
+                    local espData = ESPObjects[p.Character]
+                    if espData and espData.label then
+                        local br = GetStat(p, "Brainrots")
+                        local cash = GetStat(p, "Cash") + GetStat(p, "Coins")
+                        if showStats then
+                            espData.label.Text = p.Name .. "\n🧠 " .. br .. "  💰 " .. cash
+                        else
+                            espData.label.Text = p.Name
+                        end
+                    end
+                end
+            end
+        else
+            ClearESPByTag("player")
+        end
+
+        -- ESP Drops
+        if Options.ShowDrops and Options.ShowDrops.Value then
+            for _, obj in ipairs(Workspace:GetDescendants()) do
+                for _, kw in ipairs(dropKeywords) do
+                    if obj.Name:find(kw) then
+                        AddESP(obj, Color3.fromRGB(255,215,0), Color3.fromRGB(255,255,0), "drop")
+                        break
+                    end
+                end
+            end
+        else
+            ClearESPByTag("drop")
+        end
+    end
+end)
+
+-- ── Infinite Jump ────────────────────────────────────────────────────
+UserInputService.JumpRequest:Connect(function()
+    if Options.InfiniteJump and Options.InfiniteJump.Value and hum then
+        hum:ChangeState(Enum.HumanoidStateType.Jumping)
+    end
+end)
+
+-- ── Auto Rebirth (separado — 2s) ─────────────────────────────────────
+task.spawn(function()
+    while task.wait(2) do
+        if Options.AutoRebirth and Options.AutoRebirth.Value then
+            SafeCall(function()
+                FireRemote("Rebirth")
+                FireRemote("DoRebirth")
+                FireRemote("PrestigeRebirth")
+                local gui = lp:FindFirstChild("PlayerGui")
+                if gui then
+                    for _, btn in ipairs(gui:GetDescendants()) do
+                        if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Name:lower():find("rebirth") then
+                            SafeCall(function() btn.MouseButton1Click:Fire() end)
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+-- ── Limpar ESP de jogadores que saíram ──────────────────────────────
+Players.PlayerRemoving:Connect(function(p)
+    if p.Character then RemoveESP(p.Character) end
+end)
+
+-- ╔══════════════════════════════════════╗
+-- ║       ⚙️  SETTINGS                  ║
+-- ╚══════════════════════════════════════╝
+
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({})
+InterfaceManager:SetFolder("StealBrainrotHub")
+SaveManager:SetFolder("StealBrainrotHub/configs")
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
+
+Window:SelectTab(1)
+SaveManager:LoadAutoloadConfig()
+
+Notify("🧠 Brainrot Hub v2.0", "Script carregado! RCtrl para minimizar.", 7)
