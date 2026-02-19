@@ -1,0 +1,871 @@
+-- ================================================================
+--  UNIVERSAL NEXUS v1.0 🌌
+--  Heavily inspired by Infinite Yield
+--  Features: GUI + Command Bar + 50+ Functions
+-- ================================================================
+
+-- // LOAD FLUENT UI
+local Fluent          = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager     = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager= loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+-- ================================================================
+-- // SERVICES
+-- ================================================================
+local Players          = game:GetService("Players")
+local RunService       = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TeleportService  = game:GetService("TeleportService")
+local HttpService      = game:GetService("HttpService")
+local Lighting         = game:GetService("Lighting")
+local StarterGui       = game:GetService("StarterGui")
+local VirtualUser      = game:GetService("VirtualUser")
+local ReplicatedStorage= game:GetService("ReplicatedStorage")
+local Workspace        = game:GetService("Workspace")
+
+-- ================================================================
+-- // HELPERS
+-- ================================================================
+local lp = Players.LocalPlayer
+local function getChar()  return lp.Character end
+local function getHum()   local c = getChar() return c and c:FindFirstChildOfClass("Humanoid") end
+local function getRoot()  local c = getChar() return c and c:FindFirstChild("HumanoidRootPart") end
+local function getCam()   return Workspace.CurrentCamera end
+local function notify(title, msg, dur)
+    Fluent:Notify({ Title = title, Content = msg or "", Duration = dur or 4 })
+end
+local function safeCall(fn)
+    local ok, err = pcall(fn)
+    if not ok then notify("⚠️ Error", tostring(err), 5) end
+end
+
+-- ================================================================
+-- // WINDOW
+-- ================================================================
+local Window = Fluent:CreateWindow({
+    Title       = "UNIVERSAL Nameless",
+    SubTitle    = "By O_P0ttencias",
+    TabWidth    = 170,
+    Size        = UDim2.fromOffset(660, 520),
+    Acrylic     = true,
+    Theme       = "Dark",
+    MinimizeKey = Enum.KeyCode.RightControl
+})
+
+local Options = Fluent.Options
+
+-- ================================================================
+-- // TABS
+-- ================================================================
+local Tabs = {
+    Player   = Window:AddTab({ Title = "Player",       Icon = "user"          }),
+    Combat   = Window:AddTab({ Title = "Combat",       Icon = "shield"        }),
+    World    = Window:AddTab({ Title = "World",        Icon = "globe"         }),
+    Visuals  = Window:AddTab({ Title = "Visuals",      Icon = "eye"           }),
+    Server   = Window:AddTab({ Title = "Server",       Icon = "server"        }),
+    Network  = Window:AddTab({ Title = "Dev Tools",    Icon = "code"          }),
+    CMD      = Window:AddTab({ Title = "Commands",     Icon = "terminal"      }),
+    Settings = Window:AddTab({ Title = "Settings",     Icon = "settings"      }),
+}
+
+-- ================================================================
+-- 🏃 TAB 1: PLAYER
+-- ================================================================
+Tabs.Player:AddSection("⚡ Movement")
+
+Tabs.Player:AddSlider("WalkSpeed", {
+    Title = "Walk Speed", Description = "Default: 16",
+    Min = 16, Max = 500, Default = 16, Rounding = 0,
+    Callback = function(v) local h = getHum() if h then h.WalkSpeed = v end end
+})
+
+Tabs.Player:AddSlider("JumpPower", {
+    Title = "Jump Power", Description = "Default: 50",
+    Min = 50, Max = 500, Default = 50, Rounding = 0,
+    Callback = function(v) local h = getHum() if h then h.JumpPower = v end end
+})
+
+Tabs.Player:AddToggle("InfJump", { Title = "Infinite Jump", Default = false })
+UserInputService.JumpRequest:Connect(function()
+    if Options.InfJump.Value then
+        local h = getHum()
+        if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end
+    end
+end)
+
+Tabs.Player:AddToggle("Noclip", { Title = "Noclip", Default = false })
+RunService.Stepped:Connect(function()
+    if Options.Noclip.Value then
+        local c = getChar()
+        if c then
+            for _, v in pairs(c:GetDescendants()) do
+                if v:IsA("BasePart") then v.CanCollide = false end
+            end
+        end
+    end
+end)
+
+-- FLY
+local flyConn, bodyVel, bodyGyro
+local FlyToggle = Tabs.Player:AddToggle("Fly", { Title = "Fly (WASD + Space/Shift)", Default = false })
+FlyToggle:OnChanged(function(val)
+    local root = getRoot()
+    if not root then return end
+    if val then
+        bodyVel = Instance.new("BodyVelocity", root)
+        bodyVel.MaxForce = Vector3.new(1e6,1e6,1e6)
+        bodyVel.Velocity  = Vector3.zero
+        bodyGyro = Instance.new("BodyGyro", root)
+        bodyGyro.MaxTorque = Vector3.new(1e6,1e6,1e6)
+        bodyGyro.P = 1e4
+        flyConn = RunService.RenderStepped:Connect(function()
+            local cam = getCam()
+            local speed = Options.FlySpeed and Options.FlySpeed.Value or 80
+            local mv = Vector3.zero
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then mv = mv + cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then mv = mv - cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then mv = mv - cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then mv = mv + cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space)      then mv = mv + Vector3.new(0,1,0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)  then mv = mv - Vector3.new(0,1,0) end
+            bodyVel.Velocity = mv.Magnitude > 0 and mv.Unit * speed or Vector3.zero
+            bodyGyro.CFrame  = cam.CFrame
+        end)
+    else
+        if flyConn then flyConn:Disconnect() end
+        if bodyVel  then bodyVel:Destroy() end
+        if bodyGyro then bodyGyro:Destroy() end
+    end
+end)
+
+Tabs.Player:AddSlider("FlySpeed", {
+    Title = "Fly Speed", Min = 10, Max = 600, Default = 80, Rounding = 0,
+    Callback = function() end -- read inline in flyConn
+})
+
+-- CLICK TP
+local clickTPConn
+local ClickTP = Tabs.Player:AddToggle("ClickTP", { Title = "Click Teleport", Default = false })
+ClickTP:OnChanged(function(val)
+    if val then
+        clickTPConn = UserInputService.InputBegan:Connect(function(inp, gpe)
+            if gpe then return end
+            if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+                local unitRay = getCam():ScreenPointToRay(inp.Position.X, inp.Position.Y)
+                local result = Workspace:Raycast(unitRay.Origin, unitRay.Direction * 1000)
+                if result then
+                    local root = getRoot()
+                    if root then root.CFrame = CFrame.new(result.Position + Vector3.new(0,3,0)) end
+                end
+            end
+        end)
+    else
+        if clickTPConn then clickTPConn:Disconnect() end
+    end
+end)
+
+Tabs.Player:AddSection("🎯 Teleport")
+
+-- Teleport to player
+Tabs.Player:AddDropdown("TeleportTarget", {
+    Title  = "Select Player",
+    Values = {},
+    Default = 1,
+})
+
+Tabs.Player:AddButton({
+    Title = "🔄 Refresh Player List",
+    Callback = function()
+        local names = {}
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= lp then table.insert(names, p.Name) end
+        end
+        Options.TeleportTarget:SetValues(names)
+        notify("Refreshed", #names .. " player(s) found.")
+    end
+})
+
+Tabs.Player:AddButton({
+    Title = "📍 Teleport to Player",
+    Callback = function()
+        local target = Options.TeleportTarget.Value
+        local p = Players:FindFirstChild(target)
+        if p and p.Character then
+            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+            local root = getRoot()
+            if hrp and root then
+                root.CFrame = hrp.CFrame + Vector3.new(0, 3, 0)
+                notify("Teleported", "Went to " .. target)
+            end
+        else
+            notify("❌ Failed", "Player not found or has no character.")
+        end
+    end
+})
+
+Tabs.Player:AddSection("🔧 Misc")
+
+Tabs.Player:AddButton({ Title = "♻️ Rejoin Server", Callback = function()
+    TeleportService:Teleport(game.PlaceId, lp)
+end })
+
+Tabs.Player:AddButton({ Title = "💀 Reset Character", Callback = function()
+    local h = getHum() if h then h.Health = 0 end
+end })
+
+Tabs.Player:AddButton({ Title = "📋 Copy My UserID", Callback = function()
+    setclipboard(tostring(lp.UserId))
+    notify("Copied!", "UserID: " .. lp.UserId)
+end })
+
+-- ================================================================
+-- ⚔️ TAB 2: COMBAT
+-- ================================================================
+Tabs.Combat:AddSection("🛡️ Defense")
+
+Tabs.Combat:AddToggle("GodMode", {
+    Title = "God Mode (Anti-Kill)",
+    Description = "Keeps health at max every frame",
+    Default = false
+})
+RunService.Heartbeat:Connect(function()
+    if Options.GodMode.Value then
+        local h = getHum()
+        if h and h.Health < h.MaxHealth then h.Health = h.MaxHealth end
+    end
+end)
+
+Tabs.Combat:AddToggle("AntiAFK", {
+    Title = "Anti-AFK",
+    Description = "Prevents kick for inactivity via VirtualUser",
+    Default = false
+})
+task.spawn(function()
+    while true do
+        task.wait(18)
+        if Options.AntiAFK.Value then
+            VirtualUser:Button2Down(Vector2.zero, getCam().CFrame)
+            task.wait(0.1)
+            VirtualUser:Button2Up(Vector2.zero, getCam().CFrame)
+        end
+    end
+end)
+
+Tabs.Combat:AddToggle("Invisible", {
+    Title = "Invisible (LocalSided)",
+    Description = "Makes your character transparent to yourself",
+    Default = false
+})
+RunService.RenderStepped:Connect(function()
+    local c = getChar()
+    if not c then return end
+    for _, v in pairs(c:GetDescendants()) do
+        if v:IsA("BasePart") and v.Name ~= "HumanoidRootPart" then
+            v.LocalTransparencyModifier = Options.Invisible.Value and 1 or 0
+        end
+    end
+end)
+
+Tabs.Combat:AddSection("⚔️ Offense")
+
+Tabs.Combat:AddButton({
+    Title = "💥 Fling Nearest Player",
+    Description = "Sends nearest player flying (FE trick)",
+    Callback = function()
+        local root = getRoot()
+        if not root then return end
+        local nearest, minDist = nil, math.huge
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= lp and p.Character then
+                local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    local dist = (hrp.Position - root.Position).Magnitude
+                    if dist < minDist then nearest = p; minDist = dist end
+                end
+            end
+        end
+        if nearest and nearest.Character then
+            local hrp = nearest.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                root.CFrame = hrp.CFrame
+                local bv = Instance.new("BodyVelocity", root)
+                bv.Velocity = Vector3.new(math.random(-200,200), 300, math.random(-200,200))
+                bv.MaxForce = Vector3.new(1e6,1e6,1e6)
+                game:GetService("Debris"):AddItem(bv, 0.2)
+                notify("Fling", "Sent " .. nearest.Name .. " flying!")
+            end
+        else
+            notify("❌ No target", "No nearby players found.")
+        end
+    end
+})
+
+Tabs.Combat:AddToggle("AutoFling", {
+    Title = "Auto-Fling (Continuous)",
+    Default = false
+})
+local autoFlingConn
+Options.AutoFling:OnChanged(function(val) -- this will be picked up in the heartbeat below end)
+RunService.Heartbeat:Connect(function()
+    if not Options.AutoFling or not Options.AutoFling.Value then return end
+    local root = getRoot()
+    if not root then return end
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= lp and p.Character then
+            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+            if hrp and (hrp.Position - root.Position).Magnitude < 10 then
+                local bv = Instance.new("BodyVelocity", root)
+                bv.Velocity = Vector3.new(math.random(-500,500), 800, math.random(-500,500))
+                bv.MaxForce = Vector3.new(1e9,1e9,1e9)
+                game:GetService("Debris"):AddItem(bv, 0.1)
+            end
+        end
+    end
+end)
+
+Tabs.Combat:AddSection("🎯 Aim")
+
+Tabs.Combat:AddToggle("SilentAim", {
+    Title = "Silent Aim (Hit closest player)",
+    Description = "Redirects bullets toward nearest player head",
+    Default = false
+})
+
+-- Silent Aim via __namecall hook (works on some games)
+local oldNamecall
+oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+    local args = {...}
+    if Options.SilentAim and Options.SilentAim.Value and getnamecallmethod() == "FindPartOnRayWithIgnoreList" then
+        local root = getRoot()
+        if root then
+            local nearest, minDist = nil, math.huge
+            for _, p in pairs(Players:GetPlayers()) do
+                if p ~= lp and p.Character then
+                    local head = p.Character:FindFirstChild("Head")
+                    if head then
+                        local dist = (head.Position - root.Position).Magnitude
+                        if dist < minDist then nearest = head; minDist = dist end
+                    end
+                end
+            end
+            if nearest and minDist < 300 then
+                local dir = (nearest.Position - getCam().CFrame.Position).Unit * 1000
+                args[1] = Ray.new(getCam().CFrame.Position, dir)
+                return oldNamecall(self, table.unpack(args))
+            end
+        end
+    end
+    return oldNamecall(self, ...)
+end)
+
+-- ================================================================
+-- 🌎 TAB 3: WORLD
+-- ================================================================
+Tabs.World:AddSection("🌤️ Environment")
+
+Tabs.World:AddToggle("FullBright", { Title = "Full Bright", Default = false })
+Options.FullBright:OnChanged(function(v)
+    Lighting.Brightness    = v and 2 or 1
+    Lighting.ClockTime     = v and 14 or 14
+    Lighting.FogEnd        = v and 100000 or 10000
+    Lighting.GlobalShadows = not v
+end)
+
+Tabs.World:AddSlider("TimeOfDay", {
+    Title = "Time of Day", Min = 0, Max = 24, Default = 14, Rounding = 1,
+    Callback = function(v) Lighting.ClockTime = v end
+})
+
+Tabs.World:AddSlider("FogDistance", {
+    Title = "Fog End Distance", Min = 100, Max = 100000, Default = 10000, Rounding = 0,
+    Callback = function(v) Lighting.FogEnd = v end
+})
+
+Tabs.World:AddColorpicker("AmbientColor", {
+    Title = "Ambient Color", Default = Color3.fromRGB(70,70,70),
+    Callback = function(v) Lighting.Ambient = v end
+})
+
+Tabs.World:AddSection("🗑️ Cleanup")
+
+Tabs.World:AddButton({ Title = "🪑 Destroy All Seats", Callback = function()
+    local n = 0
+    for _, v in pairs(Workspace:GetDescendants()) do
+        if v:IsA("Seat") or v:IsA("VehicleSeat") then v:Destroy(); n+=1 end
+    end
+    notify("Done", n .. " seat(s) removed.")
+end })
+
+Tabs.World:AddButton({ Title = "🚗 Destroy All Vehicles", Callback = function()
+    local n = 0
+    for _, v in pairs(Workspace:GetDescendants()) do
+        if v:IsA("VehicleSeat") then
+            local model = v:FindFirstAncestorOfClass("Model")
+            if model then model:Destroy(); n+=1 end
+        end
+    end
+    notify("Done", n .. " vehicle(s) removed.")
+end })
+
+Tabs.World:AddButton({ Title = "💡 Remove All Particle Effects", Callback = function()
+    local n = 0
+    for _, v in pairs(Workspace:GetDescendants()) do
+        if v:IsA("ParticleEmitter") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Sparkles") then
+            v:Destroy(); n+=1
+        end
+    end
+    notify("Done", n .. " particle effects removed.")
+end })
+
+Tabs.World:AddButton({ Title = "🚫 Remove All GUIs", Callback = function()
+    for _, g in pairs(lp.PlayerGui:GetChildren()) do
+        pcall(function() g:Destroy() end)
+    end
+    notify("Done", "All GUIs removed.")
+end })
+
+Tabs.World:AddSection("🌊 Gravity")
+
+Tabs.World:AddSlider("GravitySlider", {
+    Title = "Gravity", Min = 0, Max = 300, Default = 196, Rounding = 0,
+    Callback = function(v) Workspace.Gravity = v end
+})
+
+Tabs.World:AddButton({ Title = "↩️ Reset Gravity", Callback = function()
+    Workspace.Gravity = 196
+    notify("Gravity", "Reset to 196.")
+end })
+
+-- ================================================================
+-- 👁️ TAB 4: VISUALS
+-- ================================================================
+Tabs.Visuals:AddSection("🔴 Player ESP")
+
+Tabs.Visuals:AddToggle("ESP", { Title = "Player Highlights (ESP)", Default = false })
+Tabs.Visuals:AddColorpicker("ESPFillColor",    { Title = "Fill Color",    Default = Color3.fromRGB(255,50,50)  })
+Tabs.Visuals:AddColorpicker("ESPOutlineColor", { Title = "Outline Color", Default = Color3.fromRGB(255,255,255) })
+Tabs.Visuals:AddSlider("ESPTransparency", {
+    Title = "Fill Transparency", Min = 0, Max = 1, Default = 0.5, Rounding = 2,
+    Callback = function() end
+})
+
+task.spawn(function()
+    while task.wait(0.5) do
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= lp and p.Character then
+                if Options.ESP.Value then
+                    local h = p.Character:FindFirstChild("NexusESP")
+                    if not h then h = Instance.new("Highlight", p.Character); h.Name = "NexusESP" end
+                    h.FillColor          = Options.ESPFillColor.Value
+                    h.OutlineColor       = Options.ESPOutlineColor.Value
+                    h.FillTransparency   = Options.ESPTransparency.Value
+                else
+                    local h = p.Character:FindFirstChild("NexusESP")
+                    if h then h:Destroy() end
+                end
+            end
+        end
+    end
+end)
+
+Tabs.Visuals:AddSection("🏷️ Name Tags")
+
+Tabs.Visuals:AddToggle("NameTags", { Title = "Player Name + HP Tags", Default = false })
+
+task.spawn(function()
+    while task.wait(0.5) do
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= lp and p.Character then
+                local head = p.Character:FindFirstChild("Head")
+                local hum  = p.Character:FindFirstChildOfClass("Humanoid")
+                if head and hum then
+                    local tag = head:FindFirstChild("NexusTag")
+                    if Options.NameTags.Value then
+                        if not tag then
+                            tag = Instance.new("BillboardGui", head)
+                            tag.Name = "NexusTag"
+                            tag.Size = UDim2.new(0, 160, 0, 44)
+                            tag.StudsOffset = Vector3.new(0, 3, 0)
+                            tag.AlwaysOnTop = true
+                            local nameLbl = Instance.new("TextLabel", tag)
+                            nameLbl.Name = "NameLbl"
+                            nameLbl.Size = UDim2.new(1, 0, 0.5, 0)
+                            nameLbl.BackgroundTransparency = 1
+                            nameLbl.TextColor3 = Color3.new(1,1,1)
+                            nameLbl.TextStrokeTransparency = 0
+                            nameLbl.Font = Enum.Font.GothamBold
+                            nameLbl.TextScaled = true
+                            local hpLbl = Instance.new("TextLabel", tag)
+                            hpLbl.Name = "HpLbl"
+                            hpLbl.Size = UDim2.new(1, 0, 0.5, 0.22)
+                            hpLbl.Position = UDim2.new(0, 0, 0.5, 0)
+                            hpLbl.BackgroundTransparency = 1
+                            hpLbl.TextColor3 = Color3.fromRGB(80,255,100)
+                            hpLbl.TextStrokeTransparency = 0
+                            hpLbl.Font = Enum.Font.Gotham
+                            hpLbl.TextScaled = true
+                        end
+                        local nl = tag:FindFirstChild("NameLbl")
+                        local hl = tag:FindFirstChild("HpLbl")
+                        if nl then nl.Text = p.Name end
+                        if hl then hl.Text = "❤️ " .. math.floor(hum.Health) .. "/" .. math.floor(hum.MaxHealth) end
+                    else
+                        if tag then tag:Destroy() end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+Tabs.Visuals:AddSection("📸 Camera")
+
+Tabs.Visuals:AddToggle("ThirdPersonLock", { Title = "Unlock Camera (Third Person)", Default = false })
+Options.ThirdPersonLock:OnChanged(function(v)
+    lp.CameraMode = v and Enum.CameraMode.Classic or Enum.CameraMode.Classic
+    local cam = getCam()
+    if v then cam.CameraType = Enum.CameraType.Custom end
+end)
+
+Tabs.Visuals:AddSlider("FOVSlider", {
+    Title = "Field of View", Min = 30, Max = 120, Default = 70, Rounding = 0,
+    Callback = function(v) getCam().FieldOfView = v end
+})
+
+-- ================================================================
+-- 🌐 TAB 5: SERVER
+-- ================================================================
+Tabs.Server:AddSection("📡 Server Info")
+
+Tabs.Server:AddButton({ Title = "📋 Show Server Info", Callback = function()
+    local info = string.format(
+        "PlaceId: %s\nJobId: %s\nPlayers: %d/%d\nPing: %dms",
+        tostring(game.PlaceId),
+        tostring(game.JobId),
+        #Players:GetPlayers(),
+        Players.MaxPlayers,
+        math.floor(lp:GetNetworkPing() * 1000)
+    )
+    notify("Server Info", info, 8)
+    setclipboard(info)
+end })
+
+Tabs.Server:AddSection("🔀 Server Hopping")
+
+Tabs.Server:AddButton({
+    Title = "🌍 Server Hop",
+    Description = "Finds and joins a different server",
+    Callback = function()
+        local success = false
+        notify("Server Hop", "Searching for a new server...", 3)
+        local ok, servers = pcall(function()
+            return HttpService:JSONDecode(game:HttpGet(
+                ("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Asc&limit=100"):format(game.PlaceId)
+            ))
+        end)
+        if ok and servers and servers.data then
+            for _, s in pairs(servers.data) do
+                if s.id ~= game.JobId and s.playing < s.maxPlayers then
+                    TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, lp)
+                    success = true
+                    break
+                end
+            end
+        end
+        if not success then notify("❌ Server Hop", "Could not find a different server. Try again.", 5) end
+    end
+})
+
+Tabs.Server:AddSection("👥 Player Actions")
+
+Tabs.Server:AddDropdown("ActionTarget", {
+    Title = "Select Player", Values = {}, Default = 1
+})
+Tabs.Server:AddButton({ Title = "🔄 Refresh List", Callback = function()
+    local names = {}
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= lp then table.insert(names, p.Name) end
+    end
+    Options.ActionTarget:SetValues(names)
+end })
+
+Tabs.Server:AddButton({ Title = "📍 Goto Player", Callback = function()
+    local p = Players:FindFirstChild(Options.ActionTarget.Value)
+    if p and p.Character then
+        local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+        local root = getRoot()
+        if hrp and root then root.CFrame = hrp.CFrame + Vector3.new(0,3,0) end
+    end
+end })
+
+Tabs.Server:AddButton({ Title = "🪑 Bring Player To Me", Callback = function()
+    -- clientsided only – moves camera target to look like player is here
+    notify("Note", "Bring is client-sided and visual only in FE games.")
+    local p = Players:FindFirstChild(Options.ActionTarget.Value)
+    if p and p.Character then
+        local root = getRoot()
+        local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+        if root and hrp then hrp.CFrame = root.CFrame + Vector3.new(2,0,0) end
+    end
+end })
+
+Tabs.Server:AddButton({ Title = "🔍 View Player Stats", Callback = function()
+    local p = Players:FindFirstChild(Options.ActionTarget.Value)
+    if not p then notify("❌ Error", "Player not found."); return end
+    local hum = p.Character and p.Character:FindFirstChildOfClass("Humanoid")
+    local info = string.format(
+        "Name: %s\nUserId: %d\nHP: %s\nTeam: %s\nPing: N/A",
+        p.Name,
+        p.UserId,
+        hum and (math.floor(hum.Health).."/"..math.floor(hum.MaxHealth)) or "N/A",
+        tostring(p.Team and p.Team.Name or "None")
+    )
+    notify("Player Info — " .. p.Name, info, 8)
+end })
+
+-- ================================================================
+-- 💻 TAB 6: DEV TOOLS / NETWORK
+-- ================================================================
+Tabs.Network:AddSection("🔧 Explorer & Spy")
+
+Tabs.Network:AddButton({ Title = "🕵️ Load SimpleSpy", Callback = function()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/exxtremestuffs/SimpleSpySource/master/SimpleSpy.lua"))()
+end })
+
+Tabs.Network:AddButton({ Title = "🔭 Load DarkDex (Explorer)", Callback = function()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/infyiff/backup/main/dex.lua"))()
+end })
+
+Tabs.Network:AddSection("📡 Remote Tools")
+
+Tabs.Network:AddButton({ Title = "📋 Print All RemoteEvents to Console", Callback = function()
+    local found = 0
+    for _, v in pairs(game:GetDescendants()) do
+        if v:IsA("RemoteEvent") or v:IsA("RemoteFunction") then
+            print("[NEXUS]", v.ClassName, v:GetFullName())
+            found += 1
+        end
+    end
+    notify("Remotes Found", found .. " remote(s) printed to console (F9).", 5)
+end })
+
+Tabs.Network:AddButton({ Title = "📦 Print All ModuleScripts", Callback = function()
+    local n = 0
+    for _, v in pairs(game:GetDescendants()) do
+        if v:IsA("ModuleScript") then print("[MODULE]", v:GetFullName()); n+=1 end
+    end
+    notify("Modules", n .. " ModuleScript(s) found in console.")
+end })
+
+Tabs.Network:AddSection("📊 Performance")
+
+Tabs.Network:AddButton({ Title = "📈 Show Performance Stats", Callback = function()
+    local stats = game:GetService("Stats")
+    local info = string.format(
+        "FPS: %.1f\nPing: %dms\nHeartbeat: %.2fms\nMemory: %.1f MB",
+        1/RunService.RenderStepped:Wait(),
+        math.floor(lp:GetNetworkPing()*1000),
+        RunService.Heartbeat:Wait()*1000,
+        stats:GetTotalMemoryUsageMb()
+    )
+    notify("Performance", info, 7)
+end })
+
+-- ================================================================
+-- 💬 TAB 7: COMMAND BAR (like Infinite Yield)
+-- ================================================================
+Tabs.CMD:AddSection("💬 Command Bar")
+Tabs.CMD:AddParagraph("info","Type commands below to execute actions quickly.\nExample: 'speed 100' | 'jump 150' | 'tp PlayerName'")
+
+-- The actual command input box (using Fluent's input)
+Tabs.CMD:AddInput("CmdInput", {
+    Title       = "Command Input",
+    Description = "Type a command and press Execute",
+    Placeholder = "e.g: speed 200 | jump 150 | fly | noclip | goto Player",
+    Numeric     = false,
+    Finished    = false,
+    Callback    = function() end
+})
+
+-- COMMAND REGISTRY
+local Commands = {}
+
+local function registerCmd(name, aliases, fn)
+    Commands[name] = fn
+    if aliases then
+        for _, a in pairs(aliases) do Commands[a] = fn end
+    end
+end
+
+registerCmd("speed", {"ws","walkspeed"}, function(args)
+    local v = tonumber(args[1]) or 16
+    local h = getHum() if h then h.WalkSpeed = v end
+    notify("Speed", "WalkSpeed → " .. v)
+end)
+
+registerCmd("jump", {"jp","jumppower"}, function(args)
+    local v = tonumber(args[1]) or 50
+    local h = getHum() if h then h.JumpPower = v end
+    notify("Jump", "JumpPower → " .. v)
+end)
+
+registerCmd("fly", {}, function()
+    FlyToggle:SetValue(not Options.Fly.Value)
+    notify("Fly", Options.Fly.Value and "Fly ON" or "Fly OFF")
+end)
+
+registerCmd("noclip", {"nc"}, function()
+    Options.Noclip:SetValue(not Options.Noclip.Value)
+    notify("Noclip", Options.Noclip.Value and "ON" or "OFF")
+end)
+
+registerCmd("infjump", {"ij"}, function()
+    Options.InfJump:SetValue(not Options.InfJump.Value)
+    notify("Inf Jump", Options.InfJump.Value and "ON" or "OFF")
+end)
+
+registerCmd("god", {"godmode"}, function()
+    Options.GodMode:SetValue(not Options.GodMode.Value)
+    notify("God Mode", Options.GodMode.Value and "ON" or "OFF")
+end)
+
+registerCmd("goto", {"tp"}, function(args)
+    local name = args[1]
+    if not name then notify("Usage", "goto [PlayerName]"); return end
+    local p = Players:FindFirstChild(name)
+    if p and p.Character then
+        local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+        local root = getRoot()
+        if hrp and root then root.CFrame = hrp.CFrame + Vector3.new(0,3,0) end
+        notify("Teleport", "Went to " .. name)
+    else notify("❌ Error", "Player '" .. name .. "' not found.") end
+end)
+
+registerCmd("esp", {}, function()
+    Options.ESP:SetValue(not Options.ESP.Value)
+    notify("ESP", Options.ESP.Value and "ON" or "OFF")
+end)
+
+registerCmd("bright", {"fullbright","fb"}, function()
+    Options.FullBright:SetValue(not Options.FullBright.Value)
+    notify("Full Bright", Options.FullBright.Value and "ON" or "OFF")
+end)
+
+registerCmd("gravity", {"grav"}, function(args)
+    local v = tonumber(args[1]) or 196
+    Workspace.Gravity = v
+    notify("Gravity", "Set to " .. v)
+end)
+
+registerCmd("fov", {}, function(args)
+    local v = tonumber(args[1]) or 70
+    getCam().FieldOfView = v
+    notify("FOV", "Set to " .. v)
+end)
+
+registerCmd("time", {}, function(args)
+    local v = tonumber(args[1]) or 14
+    Lighting.ClockTime = v
+    notify("Time", "Clock set to " .. v)
+end)
+
+registerCmd("rejoin", {"rj"}, function()
+    TeleportService:Teleport(game.PlaceId, lp)
+end)
+
+registerCmd("respawn", {"reset"}, function()
+    local h = getHum() if h then h.Health = 0 end
+end)
+
+registerCmd("invisible", {"invis","inv"}, function()
+    Options.Invisible:SetValue(not Options.Invisible.Value)
+    notify("Invisible", Options.Invisible.Value and "ON" or "OFF")
+end)
+
+registerCmd("sit", {}, function()
+    local h = getHum() if h then h.Sit = true end
+end)
+
+registerCmd("unsit", {"stand"}, function()
+    local h = getHum() if h then h.Sit = false end
+end)
+
+registerCmd("help", {"cmds","commands"}, function()
+    local list = ""
+    for k in pairs(Commands) do list = list .. k .. ", " end
+    notify("Commands Available", list, 10)
+end)
+
+registerCmd("serverinfo", {"info"}, function()
+    local info = string.format("PlaceId: %s\nJobId: %s\nPlayers: %d/%d",
+        tostring(game.PlaceId), tostring(game.JobId),
+        #Players:GetPlayers(), Players.MaxPlayers)
+    notify("Server Info", info, 8)
+end)
+
+registerCmd("ping", {}, function()
+    notify("Ping", math.floor(lp:GetNetworkPing()*1000) .. "ms")
+end)
+
+-- Execute button
+Tabs.CMD:AddButton({
+    Title = "▶️ Execute Command",
+    Callback = function()
+        local raw = Options.CmdInput.Value
+        if not raw or raw == "" then notify("CMD", "No command entered."); return end
+        local parts = raw:split(" ")
+        local cmd = parts[1]:lower()
+        table.remove(parts, 1)
+        if Commands[cmd] then
+            safeCall(function() Commands[cmd](parts) end)
+        else
+            notify("❌ Unknown Command", "'" .. cmd .. "' — type 'help' for a list.", 5)
+        end
+    end
+})
+
+Tabs.CMD:AddSection("📖 Command Reference")
+Tabs.CMD:AddParagraph("cmdref",
+[[speed [n]       — Set walk speed
+jump [n]         — Set jump power
+fly              — Toggle fly
+noclip / nc      — Toggle noclip
+god / godmode    — Toggle god mode
+goto [player]    — Teleport to player
+esp              — Toggle ESP
+bright / fb      — Toggle full bright
+gravity [n]      — Set gravity (default 196)
+fov [n]          — Set field of view
+time [0-24]      — Set time of day
+rejoin / rj      — Rejoin server
+respawn / reset  — Reset character
+invisible / inv  — Toggle invisibility
+sit / unsit      — Sit or stand
+ping             — Show your ping
+serverinfo       — Show server info
+help             — List all commands]])
+
+-- ================================================================
+-- ⚙️ SETTINGS
+-- ================================================================
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+SaveManager:IgnoreThemeSettings()
+InterfaceManager:SetFolder("UniversalNexus")
+SaveManager:SetFolder("UniversalNexus/configs")
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
+
+-- ================================================================
+-- // INIT
+-- ================================================================
+Window:SelectTab(1)
+
+-- Keybind to toggle command bar focus (chat-like, press ; )
+-- (Fluent handles minimize with RightControl)
+
+notify(
+    "🌌 UNIVERSAL NamelessHub v1.0",
+    "Loaded! Press RCtrl to minimize.\nTry the Commands tab or type 'help' there.",
+    7
+)
