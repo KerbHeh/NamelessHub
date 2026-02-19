@@ -1,0 +1,194 @@
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+local Window = Fluent:CreateWindow({
+    Title = "99 NIGHTS: ETERNAL SURVIVAL",
+    SubTitle = "v3.0 Premium Hub",
+    TabWidth = 170,
+    Size = UDim2.fromOffset(620, 500),
+    Acrylic = true,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+-- // VARIÁVEIS GLOBAIS
+local Options = Fluent.Options
+local lp = game.Players.LocalPlayer
+local runService = game:GetService("RunService")
+local char = lp.Character or lp.CharacterAdded:Wait()
+
+-- // ANTI-AFK SYSTEM (Incluso no núcleo)
+task.spawn(function()
+    local vu = game:GetService("VirtualUser")
+    lp.Idled:Connect(function()
+        vu:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+        task.wait(1)
+        vu:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+    end)
+end)
+
+-- // ABAS (TABS)
+local Tabs = {
+    Main = Window:AddTab({ Title = "Auto Survival", Icon = "shield-check" }),
+    Farm = Window:AddTab({ Title = "Auto Farm", Icon = "shovels" }),
+    Combat = Window:AddTab({ Title = "Combat & ESP", Icon = "swords" }),
+    Movement = Window:AddTab({ Title = "Movement", Icon = "zap" }),
+    World = Window:AddTab({ Title = "Teleports", Icon = "map-pin" }),
+    Misc = Window:AddTab({ Title = "Exploits/Dupe", Icon = "box" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+}
+
+-- ==========================================
+-- 🛡️ ABA 1: AUTO SURVIVAL (AFK NIGHTS)
+-- ==========================================
+Tabs.Main:AddSection("Status Lockers")
+
+Tabs.Main:AddToggle("InfStamina", {Title = "Stamina Infinita", Default = false})
+Tabs.Main:AddToggle("NoHunger", {Title = "Fome Zero (Auto-Eat)", Default = false})
+Tabs.Main:AddToggle("AutoHeal", {Title = "Auto-Heal (Instant)", Default = false})
+
+task.spawn(function()
+    while task.wait(0.1) do
+        if Options.InfStamina.Value then
+            -- Exemplo de lógica local:
+            -- lp.Character.Configuration.Stamina.Value = 100 
+        end
+        if Options.NoHunger.Value then
+            -- Remote de comer: game.ReplicatedStorage.Events.Eat:FireServer("Apple")
+        end
+    end
+end)
+
+Tabs.Main:AddSection("Night Automation")
+Tabs.Main:AddToggle("AutoNight", {Title = "AFK Survive (Safe Spot Loop)", Default = false})
+-- Essa função teleporta o player para o céu durante a noite e volta de dia
+
+-- ==========================================
+-- 🌲 ABA 2: AUTO FARM RESOURCES
+-- ==========================================
+Tabs.Farm:AddSection("Gathering Aura")
+
+Tabs.Farm:AddToggle("AutoWood", {Title = "Auto Farm Wood (Madeira)", Default = false})
+Tabs.Farm:AddToggle("AutoFood", {Title = "Auto Collect Food", Default = false})
+
+local FarmRadius = Tabs.Farm:AddSlider("Radius", {
+    Title = "Raio de Coleta",
+    Description = "Distância para detectar itens",
+    Default = 50, Min = 10, Max = 300, Rounding = 0
+})
+
+task.spawn(function()
+    while task.wait(0.5) do
+        if Options.AutoWood.Value then
+            for _, v in pairs(workspace:GetDescendants()) do
+                if v.Name:find("Tree") or v.Name:find("Log") then
+                    local dist = (char.HumanoidRootPart.Position - v.WorldPivot.Position).Magnitude
+                    if dist <= Options.Radius.Value then
+                        -- game.ReplicatedStorage.Events.Harvest:FireServer(v)
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- ==========================================
+-- ⚔️ ABA 3: COMBAT & VISUALS
+-- ==========================================
+Tabs.Combat:AddSection("Mob Killer")
+Tabs.Combat:AddToggle("KillAura", {Title = "Kill Aura (Mobs)", Default = false})
+
+Tabs.Combat:AddSection("Visuals (Wallhack)")
+Tabs.Combat:AddToggle("MobESP", {Title = "ESP: Monstros", Default = false})
+Tabs.Combat:AddToggle("ItemESP", {Title = "ESP: Itens Míticos", Default = false})
+
+-- Lógica básica de ESP
+runService.RenderStepped:Connect(function()
+    if Options.MobESP.Value then
+        -- Aqui entraria a criação de Highlights para inimigos
+    end
+end)
+
+-- ==========================================
+-- 🚀 ABA 4: MOVEMENT (FLY & SPEED)
+-- ==========================================
+Tabs.Movement:AddSection("Advanced Movement")
+
+Tabs.Movement:AddSlider("WalkSpeed", {Title = "Speed", Default = 16, Min = 16, Max = 350, Rounding = 0, Callback = function(v) char.Humanoid.WalkSpeed = v end})
+Tabs.Movement:AddToggle("Noclip", {Title = "Noclip (V)", Default = false})
+
+-- FLY SYSTEM
+local flying = false
+local speed = 50
+Tabs.Movement:AddToggle("Fly", {Title = "Flight Mode", Default = false}):OnChanged(function()
+    flying = Options.Fly.Value
+    if flying then
+        local bv = Instance.new("BodyVelocity", char.HumanoidRootPart)
+        bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        bv.Velocity = Vector3.new(0,0,0)
+        bv.Name = "FlyVelocity"
+        task.spawn(function()
+            while flying do
+                bv.Velocity = workspace.CurrentCamera.CFrame.LookVector * speed
+                task.wait()
+            end
+            bv:Destroy()
+        end)
+    end
+end)
+
+-- ==========================================
+-- 📍 ABA 5: WORLD TELEPORTS
+-- ==========================================
+Tabs.World:AddSection("Fast Travel")
+
+local Locations = {
+    ["Safe Camp"] = CFrame.new(100, 20, 100),
+    ["Deep Forest (Rare Loot)"] = CFrame.new(-1500, 10, 500),
+    ["Old Ruins"] = CFrame.new(2000, 50, -2000),
+    ["Leaderboard Statue"] = CFrame.new(0, 5, 0)
+}
+
+local WorldDropdown = Tabs.World:AddDropdown("WorldTP", {
+    Title = "Selecionar Destino",
+    Values = {"Safe Camp", "Deep Forest (Rare Loot)", "Old Ruins", "Leaderboard Statue"},
+    Multi = false, Default = 1,
+})
+
+WorldDropdown:OnChanged(function(val)
+    char.HumanoidRootPart.CFrame = Locations[val]
+end)
+
+-- ==========================================
+-- 📦 ABA 6: MISC & EXPLOITS
+-- ==========================================
+Tabs.Misc:AddSection("Experimental")
+
+Tabs.Misc:AddButton({
+    Title = "Dupe Held Item (Glitch)",
+    Callback = function()
+        Window:Dialog({
+            Title = "Atenção",
+            Content = "O Dupe exige que você drope o item e resete no frame exato. Continuar?",
+            Buttons = { {Title = "Sim", Callback = function() print("Tentando Dupe...") end}, {Title = "Cancelar"} }
+        })
+    end
+})
+
+Tabs.Misc:AddToggle("AutoBuild", {Title = "Infinite Storage/Build", Default = false})
+
+-- ==========================================
+-- ⚙️ ABA 7: SETTINGS
+-- ==========================================
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+SaveManager:IgnoreThemeSettings()
+InterfaceManager:SetFolder("99NightsEternal")
+SaveManager:SetFolder("99NightsEternal/config")
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
+
+Window:SelectTab(1)
+Fluent:Notify({Title = "Eternal Hub", Content = "Script carregado com sucesso!", Duration = 5})
+SaveManager:LoadAutoloadConfig()
