@@ -1,45 +1,42 @@
 -- ╔══════════════════════════════════════════════════════════╗
--- ║      JUJUTSU SHENANIGANS ⛩️ — Eternal Cursed Hub v2.0   ║
--- ║      UI: Fluent Library by dawid-scripts               ║
--- ║      Melhorado: lógica completa, sem stubs vazios       ║
+-- ║ JUJUTSU SHENANIGANS ⛩️ — Eternal Cursed Hub v2.1 (FIXED) ║
+-- ║ UI: Fluent-Renewed (forked & updated)                    ║
+-- ║ Arrumado: URLs atualizadas, compatibilidade Roblox 2026  ║
 -- ╚══════════════════════════════════════════════════════════╝
-
-local Fluent           = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
-local SaveManager      = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
-local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+local Fluent = loadstring(game:HttpGet("https://github.com/ActualMasterOogway/Fluent-Renewed/releases/latest/download/Fluent.luau"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/ActualMasterOogway/Fluent-Renewed/main/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/ActualMasterOogway/Fluent-Renewed/main/Addons/InterfaceManager.lua"))()
 
 -- ╔══════════════════════════════════════╗
--- ║        SERVICES & CORE VARS          ║
+-- ║ SERVICES & CORE VARS                 ║
 -- ╚══════════════════════════════════════╝
-
-local Players           = game:GetService("Players")
-local RunService        = game:GetService("RunService")
-local UserInputService  = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TeleportService   = game:GetService("TeleportService")
-local Workspace         = game:GetService("Workspace")
-local Lighting          = game:GetService("Lighting")
-local Camera            = Workspace.CurrentCamera
-
-local lp     = Players.LocalPlayer
-local Options= Fluent.Options
+local TeleportService = game:GetService("TeleportService")
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+local Camera = Workspace.CurrentCamera
+local lp = Players.LocalPlayer
+local Options = Fluent.Options
 
 -- ── Referências de personagem — atualizadas no respawn ─────────────
 local char, root, hum
 local function RefreshChar()
     char = lp.Character or lp.CharacterAdded:Wait()
     root = char:WaitForChild("HumanoidRootPart", 5)
-    hum  = char:WaitForChild("Humanoid", 5)
+    hum = char:WaitForChild("Humanoid", 5)
 end
 RefreshChar()
 lp.CharacterAdded:Connect(function()
     task.wait(1)
     RefreshChar()
     if hum then
-        if Options.Speed     then hum.WalkSpeed = Options.Speed.Value end
+        if Options.Speed then hum.WalkSpeed = Options.Speed.Value end
         if Options.JumpPower then
             hum.UseJumpPower = true
-            hum.JumpPower    = Options.JumpPower.Value
+            hum.JumpPower = Options.JumpPower.Value
         end
     end
     if Options.Fly and Options.Fly.Value then
@@ -53,18 +50,15 @@ lp.CharacterAdded:Connect(function()
 end)
 
 -- ╔══════════════════════════════════════╗
--- ║           HELPERS                    ║
+-- ║ HELPERS                              ║
 -- ╚══════════════════════════════════════╝
-
 local function Notify(title, content, duration)
     Fluent:Notify({ Title = title, Content = content, Duration = duration or 4 })
 end
-
 local function SafeCall(fn)
     local ok, err = pcall(fn)
     if not ok then warn("[JJSHub] " .. tostring(err)) end
 end
-
 local function FindRemote(name)
     local paths = {
         ReplicatedStorage,
@@ -81,17 +75,15 @@ local function FindRemote(name)
     end
     return nil
 end
-
 local function FireRemote(name, ...)
     local r = FindRemote(name)
     if r then
-        if r:IsA("RemoteEvent")    then SafeCall(function() r:FireServer(...)   end) end
+        if r:IsA("RemoteEvent") then SafeCall(function() r:FireServer(...) end) end
         if r:IsA("RemoteFunction") then SafeCall(function() r:InvokeServer(...) end) end
         return true
     end
     return false
 end
-
 local function DistTo(obj)
     if not root then return math.huge end
     local pos = obj:IsA("BasePart") and obj.Position
@@ -99,7 +91,6 @@ local function DistTo(obj)
     if not pos then return math.huge end
     return (root.Position - pos).Magnitude
 end
-
 -- Retorna todos os jogadores inimigos com personagem vivo
 local function GetEnemies()
     local list = {}
@@ -113,7 +104,6 @@ local function GetEnemies()
     end
     return list
 end
-
 -- Inimigo mais próximo
 local function GetNearestEnemy()
     local best, bestDist = nil, math.huge
@@ -123,8 +113,7 @@ local function GetNearestEnemy()
     end
     return best
 end
-
--- Busca valor de energia no personagem (NumerValue / atributo)
+-- Busca valor de energia no personagem (NumberValue / atributo)
 local function GetEnergyValue(player)
     local c = player.Character
     if not c then return nil end
@@ -140,32 +129,27 @@ local function GetEnergyValue(player)
 end
 
 -- ╔══════════════════════════════════════╗
--- ║         ESP SYSTEM                   ║
+-- ║ ESP SYSTEM                           ║
 -- ╚══════════════════════════════════════╝
-
 local ESPData = {} -- [player] = { highlight, billboard }
-
 local function CreateESP(player)
     if ESPData[player] or not player.Character then return end
-
     local h = Instance.new("Highlight")
-    h.FillColor           = Options.ESPFillColor    and Options.ESPFillColor.Value    or Color3.fromRGB(160, 60, 255)
-    h.OutlineColor        = Options.ESPOutlineColor and Options.ESPOutlineColor.Value or Color3.fromRGB(255, 255, 255)
-    h.FillTransparency    = 0.5
+    h.FillColor = Options.ESPFillColor and Options.ESPFillColor.Value or Color3.fromRGB(160, 60, 255)
+    h.OutlineColor = Options.ESPOutlineColor and Options.ESPOutlineColor.Value or Color3.fromRGB(255, 255, 255)
+    h.FillTransparency = 0.5
     h.OutlineTransparency = 0
     h.Adornee = player.Character
-    h.Parent  = player.Character
-
+    h.Parent = player.Character
     local pRoot = player.Character:FindFirstChild("HumanoidRootPart")
     local bb, nameLbl, hpLbl, energyLbl
     if pRoot then
         bb = Instance.new("BillboardGui")
-        bb.Size        = UDim2.new(0, 160, 0, 65)
+        bb.Size = UDim2.new(0, 160, 0, 65)
         bb.StudsOffset = Vector3.new(0, 3.5, 0)
         bb.AlwaysOnTop = true
-        bb.Adornee     = pRoot
-        bb.Parent      = pRoot
-
+        bb.Adornee = pRoot
+        bb.Parent = pRoot
         nameLbl = Instance.new("TextLabel", bb)
         nameLbl.Size = UDim2.new(1,0,0.35,0)
         nameLbl.Position = UDim2.new(0,0,0,0)
@@ -175,7 +159,6 @@ local function CreateESP(player)
         nameLbl.Font = Enum.Font.GothamBold
         nameLbl.TextScaled = true
         nameLbl.Text = player.Name
-
         hpLbl = Instance.new("TextLabel", bb)
         hpLbl.Size = UDim2.new(1,0,0.32,0)
         hpLbl.Position = UDim2.new(0,0,0.35,0)
@@ -185,7 +168,6 @@ local function CreateESP(player)
         hpLbl.Font = Enum.Font.Gotham
         hpLbl.TextScaled = true
         hpLbl.Text = "❤ ?"
-
         energyLbl = Instance.new("TextLabel", bb)
         energyLbl.Size = UDim2.new(1,0,0.33,0)
         energyLbl.Position = UDim2.new(0,0,0.67,0)
@@ -195,7 +177,6 @@ local function CreateESP(player)
         energyLbl.Font = Enum.Font.Gotham
         energyLbl.TextScaled = true
         energyLbl.Text = ""
-
         -- HP listener
         local ph = player.Character:FindFirstChildOfClass("Humanoid")
         if ph then
@@ -206,16 +187,14 @@ local function CreateESP(player)
             ph:GetPropertyChangedSignal("Health"):Connect(updHP)
         end
     end
-
     ESPData[player] = {
-        highlight  = h,
-        billboard  = bb,
-        nameLbl    = nameLbl,
-        hpLbl      = hpLbl,
-        energyLbl  = energyLbl,
+        highlight = h,
+        billboard = bb,
+        nameLbl = nameLbl,
+        hpLbl = hpLbl,
+        energyLbl = energyLbl,
     }
 end
-
 local function RemoveESP(player)
     local data = ESPData[player]
     if not data then return end
@@ -223,11 +202,9 @@ local function RemoveESP(player)
     if data.billboard and data.billboard.Parent then data.billboard:Destroy() end
     ESPData[player] = nil
 end
-
 local function ClearAllESP()
     for p in pairs(ESPData) do RemoveESP(p) end
 end
-
 Players.PlayerRemoving:Connect(RemoveESP)
 Players.PlayerAdded:Connect(function(p)
     p.CharacterAdded:Connect(function()
@@ -240,9 +217,8 @@ Players.PlayerAdded:Connect(function(p)
 end)
 
 -- ╔══════════════════════════════════════╗
--- ║           FLY SYSTEM                 ║
+-- ║ FLY SYSTEM                           ║
 -- ╚══════════════════════════════════════╝
-
 local FlyBV, FlyBG
 function EnableFly()
     if not root then return end
@@ -250,24 +226,22 @@ function EnableFly()
     if FlyBG then FlyBG:Destroy() end
     FlyBG = Instance.new("BodyGyro", root)
     FlyBG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-    FlyBG.CFrame    = root.CFrame
+    FlyBG.CFrame = root.CFrame
     FlyBV = Instance.new("BodyVelocity", root)
-    FlyBV.MaxForce  = Vector3.new(9e9, 9e9, 9e9)
-    FlyBV.Velocity  = Vector3.zero
+    FlyBV.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+    FlyBV.Velocity = Vector3.zero
     if hum then hum.PlatformStand = true end
     Notify("Movement", "✈ Fly ON — WASD + E (subir) / Q (descer)")
 end
-
 local function DisableFly()
     if FlyBV then FlyBV:Destroy() FlyBV = nil end
     if FlyBG then FlyBG:Destroy() FlyBG = nil end
-    if hum   then hum.PlatformStand = false end
+    if hum then hum.PlatformStand = false end
 end
 
 -- ╔══════════════════════════════════════╗
--- ║        ANTI-STUN HELPER              ║
+-- ║ ANTI-STUN HELPER                     ║
 -- ╚══════════════════════════════════════╝
-
 function ApplyAntiStun()
     if not char then return end
     SafeCall(function()
@@ -287,135 +261,115 @@ function ApplyAntiStun()
 end
 
 -- ╔══════════════════════════════════════╗
--- ║           WINDOW / TABS              ║
+-- ║ WINDOW / TABS                        ║
 -- ╚══════════════════════════════════════╝
-
 local Window = Fluent:CreateWindow({
-    Title       = "JUJUTSU SHENANIGANS ⛩️",
-    SubTitle    = "Eternal Cursed Hub v2.0",
-    TabWidth    = 165,
-    Size        = UDim2.fromOffset(640, 520),
-    Acrylic     = true,
-    Theme       = "Dark",
+    Title = "JUJUTSU SHENANIGANS ⛩️",
+    SubTitle = "Eternal Cursed Hub v2.1 (FIXED)",
+    TabWidth = 165,
+    Size = UDim2.fromOffset(640, 520),
+    Acrylic = true,
+    Theme = "Dark",
     MinimizeKey = Enum.KeyCode.RightControl
 })
-
+Window.Visible = true  -- Força UI visível no load
 local Tabs = {
-    Combat   = Window:AddTab({ Title = "Combat",     Icon = "swords"   }),
-    Skills   = Window:AddTab({ Title = "Techniques", Icon = "zap"      }),
-    Movement = Window:AddTab({ Title = "Movement",   Icon = "wind"     }),
-    Visuals  = Window:AddTab({ Title = "Visuals",    Icon = "eye"      }),
-    Misc     = Window:AddTab({ Title = "Misc",       Icon = "wrench"   }),
-    Settings = Window:AddTab({ Title = "Settings",   Icon = "settings" }),
+    Combat = Window:AddTab({ Title = "Combat", Icon = "swords" }),
+    Skills = Window:AddTab({ Title = "Techniques", Icon = "zap" }),
+    Movement = Window:AddTab({ Title = "Movement", Icon = "wind" }),
+    Visuals = Window:AddTab({ Title = "Visuals", Icon = "eye" }),
+    Misc = Window:AddTab({ Title = "Misc", Icon = "wrench" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" }),
 }
 
 -- ╔══════════════════════════════════════╗
--- ║   ⚔️  ABA 1 — COMBAT                ║
+-- ║ ⚔️ ABA 1 — COMBAT                    ║
 -- ╚══════════════════════════════════════╝
-
 Tabs.Combat:AddSection("Hitbox Manipulation")
-
 Tabs.Combat:AddToggle("HitboxExp", {
-    Title       = "Hitbox Expander",
+    Title = "Hitbox Expander",
     Description = "Aumenta o HumanoidRootPart dos inimigos para acertar mais fácil",
-    Default     = false,
+    Default = false,
 })
-
 Tabs.Combat:AddSlider("HitboxSize", {
-    Title       = "Hitbox Size",
+    Title = "Hitbox Size",
     Description = "Tamanho do hitbox expandido",
-    Min         = 2,
-    Max         = 60,
-    Default     = 15,
-    Rounding    = 0,
+    Min = 2,
+    Max = 60,
+    Default = 15,
+    Rounding = 0,
 })
-
 Tabs.Combat:AddToggle("HitboxVisible", {
-    Title       = "Mostrar Hitbox (Debug)",
+    Title = "Mostrar Hitbox (Debug)",
     Description = "Torna o hitbox expandido semi-transparente para visualizar",
-    Default     = false,
+    Default = false,
 })
-
 Tabs.Combat:AddSection("Kill Aura")
-
 Tabs.Combat:AddToggle("KillAura", {
-    Title       = "Kill Aura (Auto-Attack)",
+    Title = "Kill Aura (Auto-Attack)",
     Description = "Ataca automaticamente inimigos dentro do raio",
-    Default     = false,
+    Default = false,
 })
-
 Tabs.Combat:AddSlider("KillAuraRange", {
-    Title       = "Kill Aura Range",
+    Title = "Kill Aura Range",
     Description = "Distância máxima para atacar",
-    Min         = 5,
-    Max         = 120,
-    Default     = 30,
-    Rounding    = 0,
+    Min = 5,
+    Max = 120,
+    Default = 30,
+    Rounding = 0,
 })
-
 Tabs.Combat:AddDropdown("KillAuraPriority", {
-    Title       = "Alvo Prioritário",
-    Values      = {"Mais Próximo", "Menor HP", "Aleatório"},
-    Multi       = false,
-    Default     = 1,
+    Title = "Alvo Prioritário",
+    Values = {"Mais Próximo", "Menor HP", "Aleatório"},
+    Multi = false,
+    Default = 1,
 })
-
 Tabs.Combat:AddSection("Melee Mods")
-
 Tabs.Combat:AddToggle("AutoBlock", {
-    Title       = "Auto Block",
+    Title = "Auto Block",
     Description = "Bloqueia automaticamente ataques recebidos",
-    Default     = false,
+    Default = false,
 })
-
 Tabs.Combat:AddToggle("AutoCounter", {
-    Title       = "Auto Counter",
+    Title = "Auto Counter",
     Description = "Tenta contrar ataques via remote",
-    Default     = false,
+    Default = false,
 })
-
 Tabs.Combat:AddToggle("GodMode", {
-    Title       = "God Mode (Imortal)",
+    Title = "God Mode (Imortal)",
     Description = "HP travado no máximo permanentemente",
-    Default     = false,
+    Default = false,
 })
 
 -- ╔══════════════════════════════════════╗
--- ║   ✨  ABA 2 — TECHNIQUES / SKILLS    ║
+-- ║ ✨ ABA 2 — TECHNIQUES / SKILLS       ║
 -- ╚══════════════════════════════════════╝
-
 Tabs.Skills:AddSection("Cursed Energy")
-
 Tabs.Skills:AddToggle("InfEnergy", {
-    Title       = "Infinite Cursed Energy",
+    Title = "Infinite Cursed Energy",
     Description = "Trava a energia amaldiçoada no máximo constantemente",
-    Default     = false,
+    Default = false,
 })
-
 Tabs.Skills:AddToggle("NoCooldown", {
-    Title       = "No Cooldown (All Skills)",
+    Title = "No Cooldown (All Skills)",
     Description = "Remove cooldown de todas as skills via atributos/remotes",
-    Default     = false,
+    Default = false,
 })
-
 Tabs.Skills:AddToggle("AutoBlackFlash", {
-    Title       = "Auto Black Flash Chain",
+    Title = "Auto Black Flash Chain",
     Description = "Encadeia Black Flash automaticamente assim que disponível",
-    Default     = false,
+    Default = false,
 })
-
 Tabs.Skills:AddToggle("AutoSkills", {
-    Title       = "Auto Use Skills (1-4)",
+    Title = "Auto Use Skills (1-4)",
     Description = "Usa as skills automaticamente quando disponíveis",
-    Default     = false,
+    Default = false,
 })
-
 Tabs.Skills:AddSection("Domain Expansion")
-
 Tabs.Skills:AddButton({
-    Title       = "⛩ Domain Expansion",
+    Title = "⛩ Domain Expansion",
     Description = "Ryōiki Tenkai! — Dispara o remote de Domain Expansion",
-    Callback    = function()
+    Callback = function()
         local domainRemotes = {
             "DomainExpansion", "Domain", "RyokiTenkai",
             "Expand", "ExpandDomain", "SpecialMove",
@@ -440,11 +394,10 @@ Tabs.Skills:AddButton({
         Notify("⛩ Domain", fired and "Ryōiki Tenkai! ✅" or "Remote não encontrado — tente via tecla do jogo")
     end
 })
-
 Tabs.Skills:AddButton({
-    Title       = "💥 Auto Ultimate Move",
+    Title = "💥 Auto Ultimate Move",
     Description = "Usa o ultimate/special disponível imediatamente",
-    Callback    = function()
+    Callback = function()
         local ultRemotes = {"Ultimate","UltimateMove","Special","SpecialAttack","Super","Finisher"}
         local fired = false
         for _, name in ipairs(ultRemotes) do
@@ -460,13 +413,11 @@ Tabs.Skills:AddButton({
         Notify("💥 Ultimate", "Ultimate disparado!")
     end
 })
-
 Tabs.Skills:AddSection("Skill Keybinds")
-
 Tabs.Skills:AddButton({
-    Title       = "🌀 Skill 1 (Q / Z)",
+    Title = "🌀 Skill 1 (Q / Z)",
     Description = "Dispara a primeira skill",
-    Callback    = function()
+    Callback = function()
         for _, key in ipairs({Enum.KeyCode.Q, Enum.KeyCode.Z}) do
             local vi = Instance.new("InputObject")
             vi.KeyCode = key
@@ -476,11 +427,10 @@ Tabs.Skills:AddButton({
         FireRemote("Skill1") FireRemote("UseSkill", 1)
     end
 })
-
 Tabs.Skills:AddButton({
-    Title       = "⚡ Skill 2 (E / X)",
+    Title = "⚡ Skill 2 (E / X)",
     Description = "Dispara a segunda skill",
-    Callback    = function()
+    Callback = function()
         for _, key in ipairs({Enum.KeyCode.E, Enum.KeyCode.X}) do
             local vi = Instance.new("InputObject")
             vi.KeyCode = key
@@ -490,11 +440,10 @@ Tabs.Skills:AddButton({
         FireRemote("Skill2") FireRemote("UseSkill", 2)
     end
 })
-
 Tabs.Skills:AddButton({
-    Title       = "🔥 Skill 3 (R / C)",
+    Title = "🔥 Skill 3 (R / C)",
     Description = "Dispara a terceira skill",
-    Callback    = function()
+    Callback = function()
         for _, key in ipairs({Enum.KeyCode.R, Enum.KeyCode.C}) do
             local vi = Instance.new("InputObject")
             vi.KeyCode = key
@@ -506,102 +455,88 @@ Tabs.Skills:AddButton({
 })
 
 -- ╔══════════════════════════════════════╗
--- ║   🏃  ABA 3 — MOVEMENT              ║
+-- ║ 🏃 ABA 3 — MOVEMENT                  ║
 -- ╚══════════════════════════════════════╝
-
 Tabs.Movement:AddSection("Speed & Jump")
-
 Tabs.Movement:AddSlider("Speed", {
-    Title       = "Flash Step Speed",
+    Title = "Flash Step Speed",
     Description = "Velocidade de movimento do sorcerer",
-    Min         = 0,
-    Max         = 350,
-    Default     = 16,
-    Rounding    = 0,
-    Callback    = function(v)
+    Min = 0,
+    Max = 350,
+    Default = 16,
+    Rounding = 0,
+    Callback = function(v)
         if hum then hum.WalkSpeed = v end
     end,
 })
-
 Tabs.Movement:AddSlider("JumpPower", {
-    Title       = "Jump Power",
+    Title = "Jump Power",
     Description = "Altura do salto",
-    Min         = 0,
-    Max         = 400,
-    Default     = 50,
-    Rounding    = 0,
-    Callback    = function(v)
+    Min = 0,
+    Max = 400,
+    Default = 50,
+    Rounding = 0,
+    Callback = function(v)
         if hum then
             hum.UseJumpPower = true
-            hum.JumpPower    = v
+            hum.JumpPower = v
         end
     end,
 })
-
 Tabs.Movement:AddToggle("InfiniteJump", {
-    Title       = "Infinite Jump",
+    Title = "Infinite Jump",
     Description = "Salta infinitamente no ar",
-    Default     = false,
+    Default = false,
 })
-
 Tabs.Movement:AddToggle("InfDash", {
-    Title       = "Infinite Dash / Stamina",
+    Title = "Infinite Dash / Stamina",
     Description = "Stamina e dash sem cooldown",
-    Default     = false,
+    Default = false,
 })
-
 Tabs.Movement:AddSection("Fly Mode")
-
 Tabs.Movement:AddToggle("Fly", {
-    Title       = "Fly (Levitação)",
+    Title = "Fly (Levitação)",
     Description = "Flutua como um sorcerer de alto escalão. WASD + E/Q",
-    Default     = false,
+    Default = false,
 })
 Options.Fly:OnChanged(function()
     if Options.Fly.Value then EnableFly() else DisableFly() end
 end)
-
 Tabs.Movement:AddSlider("FlySpeed", {
-    Title       = "Fly Speed",
-    Min         = 10,
-    Max         = 500,
-    Default     = 90,
-    Rounding    = 0,
+    Title = "Fly Speed",
+    Min = 10,
+    Max = 500,
+    Default = 90,
+    Rounding = 0,
 })
-
 Tabs.Movement:AddSection("Defense")
-
 Tabs.Movement:AddToggle("AntiStun", {
-    Title       = "Anti-Stun / No Ragdoll",
+    Title = "Anti-Stun / No Ragdoll",
     Description = "Previne ragdoll e stun de ataques inimigos",
-    Default     = false,
+    Default = false,
 })
 Options.AntiStun:OnChanged(function()
     if Options.AntiStun.Value then ApplyAntiStun() end
 end)
-
 Tabs.Movement:AddToggle("Noclip", {
-    Title       = "Noclip",
+    Title = "Noclip",
     Description = "Atravessa paredes (útil para explorar domínios)",
-    Default     = false,
+    Default = false,
 })
-
 Tabs.Movement:AddToggle("AntiVoid", {
-    Title       = "Anti Void",
+    Title = "Anti Void",
     Description = "Teleporta de volta ao mapa se cair no void",
-    Default     = false,
+    Default = false,
 })
 
 -- ╔══════════════════════════════════════╗
--- ║   👁️  ABA 4 — VISUALS               ║
+-- ║ 👁️ ABA 4 — VISUALS                   ║
 -- ╚══════════════════════════════════════╝
-
 Tabs.Visuals:AddSection("Player ESP")
-
 Tabs.Visuals:AddToggle("PlayerESP", {
-    Title       = "Player ESP (Wallhack)",
+    Title = "Player ESP (Wallhack)",
     Description = "Destaca todos os players com highlight roxo",
-    Default     = false,
+    Default = false,
 })
 Options.PlayerESP:OnChanged(function()
     if Options.PlayerESP.Value then
@@ -614,65 +549,55 @@ Options.PlayerESP:OnChanged(function()
         Notify("Visuals", "ESP Desativado ❌")
     end
 end)
-
 Tabs.Visuals:AddToggle("EnergyBarESP", {
-    Title       = "Mostrar Energia no ESP",
+    Title = "Mostrar Energia no ESP",
     Description = "Exibe a energia amaldiçoada no nametag do inimigo",
-    Default     = false,
+    Default = false,
 })
-
 Tabs.Visuals:AddColorpicker("ESPFillColor", {
-    Title   = "ESP Fill Color",
+    Title = "ESP Fill Color",
     Default = Color3.fromRGB(160, 60, 255),
 })
-
 Tabs.Visuals:AddColorpicker("ESPOutlineColor", {
-    Title   = "ESP Outline Color",
+    Title = "ESP Outline Color",
     Default = Color3.fromRGB(255, 255, 255),
 })
-
 Tabs.Visuals:AddSlider("ESPTransparency", {
-    Title       = "ESP Fill Transparency",
-    Min         = 0,
-    Max         = 1,
-    Default     = 0.5,
-    Rounding    = 2,
+    Title = "ESP Fill Transparency",
+    Min = 0,
+    Max = 1,
+    Default = 0.5,
+    Rounding = 2,
 })
-
 Tabs.Visuals:AddSection("World")
-
 Tabs.Visuals:AddToggle("Fullbright", {
-    Title       = "Fullbright / No Fog",
+    Title = "Fullbright / No Fog",
     Description = "Visibilidade total, sem sombras ou névoa",
-    Default     = false,
+    Default = false,
 })
-
 Tabs.Visuals:AddToggle("NoEffects", {
-    Title       = "Remove Screen Effects",
+    Title = "Remove Screen Effects",
     Description = "Remove blur, bloom e outros efeitos de pós-processamento",
-    Default     = false,
+    Default = false,
 })
 
 -- ╔══════════════════════════════════════╗
--- ║   🔧  ABA 5 — MISC                  ║
+-- ║ 🔧 ABA 5 — MISC                      ║
 -- ╚══════════════════════════════════════╝
-
 Tabs.Misc:AddSection("Server")
-
 Tabs.Misc:AddButton({
-    Title       = "🔁 Server Hop",
+    Title = "🔁 Server Hop",
     Description = "Entra em outro servidor",
-    Callback    = function()
+    Callback = function()
         Notify("Misc", "Trocando servidor...")
         task.wait(1)
         SafeCall(function() TeleportService:Teleport(game.PlaceId, lp) end)
     end
 })
-
 Tabs.Misc:AddButton({
-    Title       = "🔌 Rejoin",
+    Title = "🔌 Rejoin",
     Description = "Reconecta no mesmo servidor",
-    Callback    = function()
+    Callback = function()
         Notify("Misc", "Reconectando...")
         task.wait(0.5)
         SafeCall(function()
@@ -680,19 +605,16 @@ Tabs.Misc:AddButton({
         end)
     end
 })
-
 Tabs.Misc:AddSection("Player Utilities")
-
 Tabs.Misc:AddToggle("AutoRespawn", {
-    Title       = "Auto Respawn",
+    Title = "Auto Respawn",
     Description = "Respawna automaticamente ao morrer",
-    Default     = false,
+    Default = false,
 })
-
 Tabs.Misc:AddButton({
-    Title       = "🤖 Ativar Anti-AFK",
+    Title = "🤖 Ativar Anti-AFK",
     Description = "Previne kick por inatividade",
-    Callback    = function()
+    Callback = function()
         local vu = game:GetService("VirtualUser")
         lp.Idled:Connect(function()
             vu:Button2Down(Vector2.new(0,0), Camera.CFrame)
@@ -702,32 +624,28 @@ Tabs.Misc:AddButton({
         Notify("Misc", "Anti-AFK ativado! ✅")
     end
 })
-
 Tabs.Misc:AddButton({
-    Title       = "💀 Kill Self (Respawn rápido)",
+    Title = "💀 Kill Self (Respawn rápido)",
     Description = "Mata o personagem para respawnar imediatamente",
-    Callback    = function()
+    Callback = function()
         if hum then hum.Health = 0 end
         Notify("Misc", "Respawnando...")
     end
 })
 
 -- ╔══════════════════════════════════════╗
--- ║        RUNTIME LOOP (Heartbeat)      ║
+-- ║ RUNTIME LOOP (Heartbeat)             ║
 -- ╚══════════════════════════════════════╝
-
 local tickers = {
-    combat   = 0,
-    skills   = 0,
-    energy   = 0,
-    espUpd   = 0,
+    combat = 0,
+    skills = 0,
+    energy = 0,
+    espUpd = 0,
     cooldown = 0,
-    auto     = 0,
+    auto = 0,
 }
-
 RunService.Heartbeat:Connect(function(dt)
     local ok = root and hum and char
-
     -- ── Speed / Jump lock ────────────────────────────────────────────
     if ok then
         if Options.Speed and hum.WalkSpeed ~= Options.Speed.Value then
@@ -736,11 +654,10 @@ RunService.Heartbeat:Connect(function(dt)
         if Options.JumpPower and Options.JumpPower.Value ~= 50 then
             SafeCall(function()
                 hum.UseJumpPower = true
-                hum.JumpPower    = Options.JumpPower.Value
+                hum.JumpPower = Options.JumpPower.Value
             end)
         end
     end
-
     -- ── God Mode ────────────────────────────────────────────────────
     if ok and Options.GodMode and Options.GodMode.Value then
         SafeCall(function()
@@ -748,7 +665,6 @@ RunService.Heartbeat:Connect(function(dt)
             if hum.Health < 1e10 then hum.Health = math.huge end
         end)
     end
-
     -- ── Noclip ──────────────────────────────────────────────────────
     if ok and Options.Noclip and Options.Noclip.Value then
         SafeCall(function()
@@ -757,41 +673,37 @@ RunService.Heartbeat:Connect(function(dt)
             end
         end)
     end
-
     -- ── Anti Void ───────────────────────────────────────────────────
     if ok and Options.AntiVoid and Options.AntiVoid.Value then
         if root.Position.Y < -80 then
             root.CFrame = CFrame.new(root.Position.X, 50, root.Position.Z)
         end
     end
-
     -- ── Fly movement ─────────────────────────────────────────────────
     if Options.Fly and Options.Fly.Value and FlyBV and FlyBG and root then
         local vel = Vector3.zero
         local spd = Options.FlySpeed and Options.FlySpeed.Value or 90
-        local cf  = Camera.CFrame
-        if UserInputService:IsKeyDown(Enum.KeyCode.W) then vel = vel + cf.LookVector  end
-        if UserInputService:IsKeyDown(Enum.KeyCode.S) then vel = vel - cf.LookVector  end
+        local cf = Camera.CFrame
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then vel = vel + cf.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then vel = vel - cf.LookVector end
         if UserInputService:IsKeyDown(Enum.KeyCode.A) then vel = vel - cf.RightVector end
         if UserInputService:IsKeyDown(Enum.KeyCode.D) then vel = vel + cf.RightVector end
         if UserInputService:IsKeyDown(Enum.KeyCode.E) then vel = vel + Vector3.new(0,1,0) end
         if UserInputService:IsKeyDown(Enum.KeyCode.Q) then vel = vel - Vector3.new(0,1,0) end
         FlyBV.Velocity = vel * spd
-        FlyBG.CFrame   = cf
+        FlyBG.CFrame = cf
     end
-
     -- ── Fullbright ───────────────────────────────────────────────────
     if Options.Fullbright and Options.Fullbright.Value then
         SafeCall(function()
-            Lighting.Brightness    = 10
-            Lighting.ClockTime     = 14
-            Lighting.FogEnd        = 100000
-            Lighting.FogStart      = 99999
+            Lighting.Brightness = 10
+            Lighting.ClockTime = 14
+            Lighting.FogEnd = 100000
+            Lighting.FogStart = 99999
             Lighting.GlobalShadows = false
-            Lighting.Ambient       = Color3.fromRGB(178, 178, 178)
+            Lighting.Ambient = Color3.fromRGB(178, 178, 178)
         end)
     end
-
     -- ── Remove Screen Effects ────────────────────────────────────────
     if Options.NoEffects and Options.NoEffects.Value then
         SafeCall(function()
@@ -804,14 +716,12 @@ RunService.Heartbeat:Connect(function(dt)
             end
         end)
     end
-
     -- ── Auto Respawn ─────────────────────────────────────────────────
     if Options.AutoRespawn and Options.AutoRespawn.Value then
         if hum and hum.Health <= 0 then
             SafeCall(function() lp:LoadCharacter() end)
         end
     end
-
     -- ────────────────────────────────────────────────────────────────
     -- HITBOX EXPANDER (0.3s)
     tickers.combat += dt
@@ -833,18 +743,15 @@ RunService.Heartbeat:Connect(function(dt)
             end)
         end
     end
-
     -- ────────────────────────────────────────────────────────────────
     -- KILL AURA (0.2s)
     tickers.auto += dt
     if tickers.auto >= 0.2 then
         tickers.auto = 0
-
         if ok and Options.KillAura and Options.KillAura.Value then
-            local range    = Options.KillAuraRange    and Options.KillAuraRange.Value    or 30
+            local range = Options.KillAuraRange and Options.KillAuraRange.Value or 30
             local priority = Options.KillAuraPriority and Options.KillAuraPriority.Value or "Mais Próximo"
             local target
-
             if priority == "Menor HP" then
                 local lowestHP = math.huge
                 for _, p in ipairs(GetEnemies()) do
@@ -857,7 +764,6 @@ RunService.Heartbeat:Connect(function(dt)
             else
                 target = GetNearestEnemy()
             end
-
             if target and target.Character then
                 local tRoot = target.Character:FindFirstChild("HumanoidRootPart")
                 if tRoot then
@@ -866,17 +772,16 @@ RunService.Heartbeat:Connect(function(dt)
                         root.CFrame = CFrame.new(tRoot.Position + Vector3.new(0, 0, 3))
                         FireRemote("M1")
                         FireRemote("Attack", target)
-                        FireRemote("Hit",    target)
-                        FireRemote("Punch",  target)
+                        FireRemote("Hit", target)
+                        FireRemote("Punch", target)
                     end
                 end
             end
         end
-
         -- Auto Block
         if ok and Options.AutoBlock and Options.AutoBlock.Value then
             SafeCall(function()
-                FireRemote("Block",    true)
+                FireRemote("Block", true)
                 FireRemote("AutoBlock",true)
                 -- Simula tecla de block (comum: F ou RMB)
                 local vi = Instance.new("InputObject")
@@ -885,7 +790,6 @@ RunService.Heartbeat:Connect(function(dt)
                 UserInputService.InputBegan:Fire(vi, false)
             end)
         end
-
         -- Auto Counter
         if ok and Options.AutoCounter and Options.AutoCounter.Value then
             SafeCall(function()
@@ -895,13 +799,11 @@ RunService.Heartbeat:Connect(function(dt)
             end)
         end
     end
-
     -- ────────────────────────────────────────────────────────────────
     -- ENERGY / STAMINA LOCK (0.1s)
     tickers.energy += dt
     if tickers.energy >= 0.1 then
         tickers.energy = 0
-
         -- Infinite Energy
         if ok and Options.InfEnergy and Options.InfEnergy.Value then
             SafeCall(function()
@@ -920,7 +822,6 @@ RunService.Heartbeat:Connect(function(dt)
                 FireRemote("SetEnergy", 100)
             end)
         end
-
         -- Infinite Dash
         if ok and Options.InfDash and Options.InfDash.Value then
             SafeCall(function()
@@ -938,13 +839,11 @@ RunService.Heartbeat:Connect(function(dt)
             end)
         end
     end
-
     -- ────────────────────────────────────────────────────────────────
     -- NO COOLDOWN / AUTO SKILLS (0.5s)
     tickers.cooldown += dt
     if tickers.cooldown >= 0.5 then
         tickers.cooldown = 0
-
         if ok and Options.NoCooldown and Options.NoCooldown.Value then
             SafeCall(function()
                 -- Zera atributos de cooldown no char
@@ -967,7 +866,6 @@ RunService.Heartbeat:Connect(function(dt)
                 FireRemote("NoCooldown")
             end)
         end
-
         if ok and Options.AutoSkills and Options.AutoSkills.Value then
             SafeCall(function()
                 local skillKeys = {Enum.KeyCode.Q, Enum.KeyCode.E, Enum.KeyCode.R, Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C}
@@ -980,7 +878,6 @@ RunService.Heartbeat:Connect(function(dt)
                 for i = 1, 4 do FireRemote("UseSkill", i) end
             end)
         end
-
         if ok and Options.AutoBlackFlash and Options.AutoBlackFlash.Value then
             SafeCall(function()
                 FireRemote("BlackFlash")
@@ -994,21 +891,18 @@ RunService.Heartbeat:Connect(function(dt)
             end)
         end
     end
-
     -- ────────────────────────────────────────────────────────────────
     -- ESP UPDATE (0.4s)
     tickers.espUpd += dt
     if tickers.espUpd >= 0.4 then
         tickers.espUpd = 0
-
         -- Atualizar cores e energy label
         for p, data in pairs(ESPData) do
             if data.highlight and data.highlight.Parent then
-                data.highlight.FillColor        = Options.ESPFillColor    and Options.ESPFillColor.Value    or Color3.fromRGB(160,60,255)
-                data.highlight.OutlineColor     = Options.ESPOutlineColor and Options.ESPOutlineColor.Value or Color3.fromRGB(255,255,255)
+                data.highlight.FillColor = Options.ESPFillColor and Options.ESPFillColor.Value or Color3.fromRGB(160,60,255)
+                data.highlight.OutlineColor = Options.ESPOutlineColor and Options.ESPOutlineColor.Value or Color3.fromRGB(255,255,255)
                 data.highlight.FillTransparency = Options.ESPTransparency and Options.ESPTransparency.Value or 0.5
             end
-
             -- Energy label
             if data.energyLbl then
                 if Options.EnergyBarESP and Options.EnergyBarESP.Value then
@@ -1022,7 +916,6 @@ RunService.Heartbeat:Connect(function(dt)
                     data.energyLbl.Text = ""
                 end
             end
-
             -- Distância no nametag
             if data.nameLbl and root and p.Character then
                 local pRoot = p.Character:FindFirstChild("HumanoidRootPart")
@@ -1043,9 +936,8 @@ UserInputService.JumpRequest:Connect(function()
 end)
 
 -- ╔══════════════════════════════════════╗
--- ║       ⚙️  SETTINGS                  ║
+-- ║ ⚙️ SETTINGS                          ║
 -- ╚══════════════════════════════════════╝
-
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
 SaveManager:IgnoreThemeSettings()
@@ -1054,8 +946,6 @@ InterfaceManager:SetFolder("JujutsuShenanigansHub")
 SaveManager:SetFolder("JujutsuShenanigansHub/configs")
 InterfaceManager:BuildInterfaceSection(Tabs.Settings)
 SaveManager:BuildConfigSection(Tabs.Settings)
-
 Window:SelectTab(1)
 SaveManager:LoadAutoloadConfig()
-
-Notify("⛩️ JJS Hub v2.0", "Ryōiki Tenkai! Script carregado. RCtrl para minimizar.", 7)
+Notify("⛩️ JJS Hub v2.1", "Ryōiki Tenkai! Script arrumado e carregado. RCtrl pra minimizar.", 7)
