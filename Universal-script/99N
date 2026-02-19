@@ -1,194 +1,1117 @@
-local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
-local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
-local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+-- ╔══════════════════════════════════════════════════════════╗
+-- ║       99 NIGHTS: ETERNAL SURVIVAL — HUB v4.0            ║
+-- ║       UI: Fluent Library by dawid-scripts               ║
+-- ║       Melhorado: lógica completa, sem comentários vazios ║
+-- ╚══════════════════════════════════════════════════════════╝
 
-local Window = Fluent:CreateWindow({
-    Title = "99 NIGHTS: ETERNAL SURVIVAL",
-    SubTitle = "v3.0 Premium Hub",
-    TabWidth = 170,
-    Size = UDim2.fromOffset(620, 500),
-    Acrylic = true,
-    Theme = "Dark",
-    MinimizeKey = Enum.KeyCode.LeftControl
-})
+local Fluent          = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager     = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager= loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
 
--- // VARIÁVEIS GLOBAIS
-local Options = Fluent.Options
-local lp = game.Players.LocalPlayer
-local runService = game:GetService("RunService")
-local char = lp.Character or lp.CharacterAdded:Wait()
+-- ╔══════════════════════════════════════╗
+-- ║         SERVICES & CORE VARS         ║
+-- ╚══════════════════════════════════════╝
 
--- // ANTI-AFK SYSTEM (Incluso no núcleo)
-task.spawn(function()
-    local vu = game:GetService("VirtualUser")
-    lp.Idled:Connect(function()
-        vu:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-        task.wait(1)
-        vu:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-    end)
+local Players          = game:GetService("Players")
+local RunService       = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage= game:GetService("ReplicatedStorage")
+local TweenService     = game:GetService("TweenService")
+local Workspace        = game:GetService("Workspace")
+local Lighting         = game:GetService("Lighting")
+local TeleportService  = game:GetService("TeleportService")
+
+local lp       = Players.LocalPlayer
+local Camera   = Workspace.CurrentCamera
+local Options  = Fluent.Options
+
+-- Referências de personagem (atualizadas no respawn)
+local char, root, hum
+local function RefreshChar()
+    char = lp.Character or lp.CharacterAdded:Wait()
+    root = char:WaitForChild("HumanoidRootPart", 5)
+    hum  = char:WaitForChild("Humanoid", 5)
+end
+RefreshChar()
+lp.CharacterAdded:Connect(function()
+    task.wait(1)
+    RefreshChar()
 end)
 
--- // ABAS (TABS)
-local Tabs = {
-    Main = Window:AddTab({ Title = "Auto Survival", Icon = "shield-check" }),
-    Farm = Window:AddTab({ Title = "Auto Farm", Icon = "shovels" }),
-    Combat = Window:AddTab({ Title = "Combat & ESP", Icon = "swords" }),
-    Movement = Window:AddTab({ Title = "Movement", Icon = "zap" }),
-    World = Window:AddTab({ Title = "Teleports", Icon = "map-pin" }),
-    Misc = Window:AddTab({ Title = "Exploits/Dupe", Icon = "box" }),
-    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
-}
+-- ╔══════════════════════════════════════╗
+-- ║           HELPER UTILITIES           ║
+-- ╚══════════════════════════════════════╝
 
--- ==========================================
--- 🛡️ ABA 1: AUTO SURVIVAL (AFK NIGHTS)
--- ==========================================
-Tabs.Main:AddSection("Status Lockers")
+local function Notify(title, content, duration)
+    Fluent:Notify({ Title = title, Content = content, Duration = duration or 4 })
+end
 
-Tabs.Main:AddToggle("InfStamina", {Title = "Stamina Infinita", Default = false})
-Tabs.Main:AddToggle("NoHunger", {Title = "Fome Zero (Auto-Eat)", Default = false})
-Tabs.Main:AddToggle("AutoHeal", {Title = "Auto-Heal (Instant)", Default = false})
+local function SafeCall(fn)
+    local ok, err = pcall(fn)
+    if not ok then warn("[99NightsHub] " .. tostring(err)) end
+end
 
-task.spawn(function()
-    while task.wait(0.1) do
-        if Options.InfStamina.Value then
-            -- Exemplo de lógica local:
-            -- lp.Character.Configuration.Stamina.Value = 100 
-        end
-        if Options.NoHunger.Value then
-            -- Remote de comer: game.ReplicatedStorage.Events.Eat:FireServer("Apple")
+-- Busca remote em múltiplos caminhos comuns do jogo
+local function FindRemote(name)
+    local paths = {
+        ReplicatedStorage,
+        ReplicatedStorage:FindFirstChild("Events"),
+        ReplicatedStorage:FindFirstChild("Remotes"),
+        ReplicatedStorage:FindFirstChild("RemoteEvents"),
+    }
+    for _, folder in ipairs(paths) do
+        if folder then
+            local r = folder:FindFirstChild(name, true)
+            if r then return r end
         end
     end
-end)
+    return nil
+end
 
-Tabs.Main:AddSection("Night Automation")
-Tabs.Main:AddToggle("AutoNight", {Title = "AFK Survive (Safe Spot Loop)", Default = false})
--- Essa função teleporta o player para o céu durante a noite e volta de dia
+local function FireRemote(name, ...)
+    local r = FindRemote(name)
+    if r then
+        if r:IsA("RemoteEvent") then SafeCall(function() r:FireServer(...) end) end
+        if r:IsA("RemoteFunction") then SafeCall(function() r:InvokeServer(...) end) end
+        return true
+    end
+    return false
+end
 
--- ==========================================
--- 🌲 ABA 2: AUTO FARM RESOURCES
--- ==========================================
-Tabs.Farm:AddSection("Gathering Aura")
+-- Distância até um objeto
+local function DistTo(obj)
+    if not root then return math.huge end
+    local pivot = obj:IsA("BasePart") and obj.Position
+               or (obj:IsA("Model") and obj.PrimaryPart and obj.PrimaryPart.Position)
+    if not pivot then return math.huge end
+    return (root.Position - pivot).Magnitude
+end
 
-Tabs.Farm:AddToggle("AutoWood", {Title = "Auto Farm Wood (Madeira)", Default = false})
-Tabs.Farm:AddToggle("AutoFood", {Title = "Auto Collect Food", Default = false})
+-- ╔══════════════════════════════════════╗
+-- ║             ESP SYSTEM               ║
+-- ╚══════════════════════════════════════╝
 
-local FarmRadius = Tabs.Farm:AddSlider("Radius", {
-    Title = "Raio de Coleta",
-    Description = "Distância para detectar itens",
-    Default = 50, Min = 10, Max = 300, Rounding = 0
+local ESPHighlights = {}
+
+local function AddHighlight(obj, fillColor, outlineColor)
+    if ESPHighlights[obj] then return end
+    local h = Instance.new("Highlight")
+    h.FillColor         = fillColor or Color3.fromRGB(255, 60, 60)
+    h.OutlineColor      = outlineColor or Color3.fromRGB(255, 255, 255)
+    h.FillTransparency  = 0.5
+    h.OutlineTransparency = 0
+    h.Adornee = obj
+    h.Parent  = obj
+    ESPHighlights[obj] = h
+end
+
+local function RemoveHighlight(obj)
+    if ESPHighlights[obj] then
+        ESPHighlights[obj]:Destroy()
+        ESPHighlights[obj] = nil
+    end
+end
+
+local function ClearAllESP()
+    for obj, h in pairs(ESPHighlights) do
+        if h and h.Parent then h:Destroy() end
+    end
+    ESPHighlights = {}
+end
+
+-- ╔══════════════════════════════════════╗
+-- ║             FLY SYSTEM               ║
+-- ╚══════════════════════════════════════╝
+
+local FlyBV, FlyBG
+local FlyActive = false
+
+local function EnableFly(speed)
+    if not root then return end
+    FlyActive = true
+    if FlyBV then FlyBV:Destroy() end
+    if FlyBG then FlyBG:Destroy() end
+
+    FlyBG = Instance.new("BodyGyro", root)
+    FlyBG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+    FlyBG.CFrame    = root.CFrame
+
+    FlyBV = Instance.new("BodyVelocity", root)
+    FlyBV.MaxForce  = Vector3.new(9e9, 9e9, 9e9)
+    FlyBV.Velocity  = Vector3.zero
+
+    if hum then hum.PlatformStand = true end
+    Notify("Movement", "✈ Fly ativado! WASD + E (subir) / Q (descer)")
+end
+
+local function DisableFly()
+    FlyActive = false
+    if FlyBV then FlyBV:Destroy() FlyBV = nil end
+    if FlyBG then FlyBG:Destroy() FlyBG = nil end
+    if hum   then hum.PlatformStand = false      end
+end
+
+-- ╔══════════════════════════════════════╗
+-- ║           WINDOW / TABS              ║
+-- ╚══════════════════════════════════════╝
+
+local Window = Fluent:CreateWindow({
+    Title       = "99 NIGHTS: ETERNAL SURVIVAL",
+    SubTitle    = "v4.0 — Hub Completo",
+    TabWidth    = 170,
+    Size        = UDim2.fromOffset(640, 520),
+    Acrylic     = true,
+    Theme       = "Dark",
+    MinimizeKey = Enum.KeyCode.RightControl
 })
 
-task.spawn(function()
-    while task.wait(0.5) do
-        if Options.AutoWood.Value then
-            for _, v in pairs(workspace:GetDescendants()) do
-                if v.Name:find("Tree") or v.Name:find("Log") then
-                    local dist = (char.HumanoidRootPart.Position - v.WorldPivot.Position).Magnitude
-                    if dist <= Options.Radius.Value then
-                        -- game.ReplicatedStorage.Events.Harvest:FireServer(v)
+local Tabs = {
+    Main     = Window:AddTab({ Title = "Auto Survival", Icon = "shield-check" }),
+    Farm     = Window:AddTab({ Title = "Auto Farm",     Icon = "leaf"         }),
+    Combat   = Window:AddTab({ Title = "Combat & ESP",  Icon = "swords"       }),
+    Movement = Window:AddTab({ Title = "Movement",      Icon = "zap"          }),
+    World    = Window:AddTab({ Title = "Teleports",     Icon = "map-pin"      }),
+    Misc     = Window:AddTab({ Title = "Exploits",      Icon = "box"          }),
+    Settings = Window:AddTab({ Title = "Settings",      Icon = "settings"     }),
+}
+
+-- ╔══════════════════════════════════════╗
+-- ║   🛡️  ABA 1 — AUTO SURVIVAL (AFK)   ║
+-- ╚══════════════════════════════════════╝
+
+Tabs.Main:AddSection("Status Lockers")
+
+Tabs.Main:AddToggle("InfStamina", {
+    Title       = "Stamina Infinita",
+    Description = "Mantém stamina no máximo constantemente",
+    Default     = false,
+})
+
+Tabs.Main:AddToggle("NoHunger", {
+    Title       = "Fome Zero (Auto-Eat)",
+    Description = "Come automaticamente para manter a fome cheia",
+    Default     = false,
+})
+
+Tabs.Main:AddToggle("AutoHeal", {
+    Title       = "Auto-Heal (Instant)",
+    Description = "Se cura instantaneamente ao tomar dano",
+    Default     = false,
+})
+
+Tabs.Main:AddToggle("GodMode", {
+    Title       = "God Mode (HP Infinito)",
+    Description = "HP travado no máximo — nunca morre",
+    Default     = false,
+})
+
+Tabs.Main:AddSection("Night Automation")
+
+Tabs.Main:AddToggle("AutoNight", {
+    Title       = "AFK Survive — Safe Spot Loop",
+    Description = "Teleporta para o céu durante a noite e volta ao amanhecer",
+    Default     = false,
+})
+
+Tabs.Main:AddToggle("AutoDaySkip", {
+    Title       = "Auto Day Skip",
+    Description = "Tenta pular para o próximo dia via remote do jogo",
+    Default     = false,
+})
+
+Tabs.Main:AddToggle("AutoCampfire", {
+    Title       = "Auto Campfire (Aquecimento)",
+    Description = "Acende fogueiras próximas automaticamente",
+    Default     = false,
+})
+
+-- ╔══════════════════════════════════════╗
+-- ║   🌲  ABA 2 — AUTO FARM              ║
+-- ╚══════════════════════════════════════╝
+
+Tabs.Farm:AddSection("Gathering Aura")
+
+Tabs.Farm:AddToggle("AutoWood", {
+    Title       = "Auto Farm Madeira (Wood)",
+    Description = "Coleta árvores dentro do raio automaticamente",
+    Default     = false,
+})
+
+Tabs.Farm:AddToggle("AutoFood", {
+    Title       = "Auto Collect Food",
+    Description = "Coleta comida (frutas, carne) automaticamente",
+    Default     = false,
+})
+
+Tabs.Farm:AddToggle("AutoStone", {
+    Title       = "Auto Farm Pedra/Minério",
+    Description = "Minera rochas e pedras dentro do raio",
+    Default     = false,
+})
+
+Tabs.Farm:AddToggle("AutoLoot", {
+    Title       = "Auto Loot (Itens Raros)",
+    Description = "Pega automaticamente qualquer item no chão",
+    Default     = false,
+})
+
+Tabs.Farm:AddToggle("AutoCraft", {
+    Title       = "Auto Craft (Receitas Salvas)",
+    Description = "Crafta itens automaticamente usando remotes",
+    Default     = false,
+})
+
+Tabs.Farm:AddSlider("FarmRadius", {
+    Title       = "Raio de Coleta",
+    Description = "Distância máxima para detectar recursos",
+    Default     = 60,
+    Min         = 10,
+    Max         = 500,
+    Rounding    = 0,
+})
+
+Tabs.Farm:AddSection("Farm Modes")
+
+Tabs.Farm:AddButton({
+    Title       = "Collect All Now",
+    Description = "Coleta TUDO ao redor instantaneamente (one-shot)",
+    Callback    = function()
+        if not root then Notify("Farm", "Personagem não encontrado!") return end
+        local count = 0
+        local keywords = {"Tree","Log","Bush","Rock","Stone","Ore","Food","Fruit","Berry","Item","Loot","Drop","Plant","Herb"}
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            for _, kw in ipairs(keywords) do
+                if obj.Name:find(kw) and DistTo(obj) <= 500 then
+                    local pos = obj:IsA("BasePart") and obj.Position
+                              or (obj:IsA("Model") and obj.PrimaryPart and obj.PrimaryPart.Position)
+                    if pos then
+                        root.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))
+                        task.wait(0.05)
+                        FireRemote("Harvest", obj)
+                        FireRemote("Collect", obj)
+                        FireRemote("PickUp",  obj)
+                        count += 1
                     end
+                    break
                 end
             end
         end
+        Notify("Farm", "Coletados: " .. count .. " recursos!")
     end
-end)
-
--- ==========================================
--- ⚔️ ABA 3: COMBAT & VISUALS
--- ==========================================
-Tabs.Combat:AddSection("Mob Killer")
-Tabs.Combat:AddToggle("KillAura", {Title = "Kill Aura (Mobs)", Default = false})
-
-Tabs.Combat:AddSection("Visuals (Wallhack)")
-Tabs.Combat:AddToggle("MobESP", {Title = "ESP: Monstros", Default = false})
-Tabs.Combat:AddToggle("ItemESP", {Title = "ESP: Itens Míticos", Default = false})
-
--- Lógica básica de ESP
-runService.RenderStepped:Connect(function()
-    if Options.MobESP.Value then
-        -- Aqui entraria a criação de Highlights para inimigos
-    end
-end)
-
--- ==========================================
--- 🚀 ABA 4: MOVEMENT (FLY & SPEED)
--- ==========================================
-Tabs.Movement:AddSection("Advanced Movement")
-
-Tabs.Movement:AddSlider("WalkSpeed", {Title = "Speed", Default = 16, Min = 16, Max = 350, Rounding = 0, Callback = function(v) char.Humanoid.WalkSpeed = v end})
-Tabs.Movement:AddToggle("Noclip", {Title = "Noclip (V)", Default = false})
-
--- FLY SYSTEM
-local flying = false
-local speed = 50
-Tabs.Movement:AddToggle("Fly", {Title = "Flight Mode", Default = false}):OnChanged(function()
-    flying = Options.Fly.Value
-    if flying then
-        local bv = Instance.new("BodyVelocity", char.HumanoidRootPart)
-        bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        bv.Velocity = Vector3.new(0,0,0)
-        bv.Name = "FlyVelocity"
-        task.spawn(function()
-            while flying do
-                bv.Velocity = workspace.CurrentCamera.CFrame.LookVector * speed
-                task.wait()
-            end
-            bv:Destroy()
-        end)
-    end
-end)
-
--- ==========================================
--- 📍 ABA 5: WORLD TELEPORTS
--- ==========================================
-Tabs.World:AddSection("Fast Travel")
-
-local Locations = {
-    ["Safe Camp"] = CFrame.new(100, 20, 100),
-    ["Deep Forest (Rare Loot)"] = CFrame.new(-1500, 10, 500),
-    ["Old Ruins"] = CFrame.new(2000, 50, -2000),
-    ["Leaderboard Statue"] = CFrame.new(0, 5, 0)
-}
-
-local WorldDropdown = Tabs.World:AddDropdown("WorldTP", {
-    Title = "Selecionar Destino",
-    Values = {"Safe Camp", "Deep Forest (Rare Loot)", "Old Ruins", "Leaderboard Statue"},
-    Multi = false, Default = 1,
 })
 
-WorldDropdown:OnChanged(function(val)
-    char.HumanoidRootPart.CFrame = Locations[val]
+-- ╔══════════════════════════════════════╗
+-- ║   ⚔️  ABA 3 — COMBAT & ESP           ║
+-- ╚══════════════════════════════════════╝
+
+Tabs.Combat:AddSection("Mob Killer")
+
+Tabs.Combat:AddToggle("KillAura", {
+    Title       = "Kill Aura (Mobs & Inimigos)",
+    Description = "Ataca automaticamente todos os mobs dentro do raio",
+    Default     = false,
+})
+
+Tabs.Combat:AddSlider("KillAuraRange", {
+    Title       = "Kill Aura Range",
+    Description = "Raio de ataque do Kill Aura",
+    Default     = 25,
+    Min         = 5,
+    Max         = 150,
+    Rounding    = 0,
+})
+
+Tabs.Combat:AddToggle("AutoTarget", {
+    Title       = "Auto Target (Menor HP)",
+    Description = "Foca automaticamente no mob com menos HP",
+    Default     = false,
+})
+
+Tabs.Combat:AddToggle("AutoDodge", {
+    Title       = "Auto Dodge / Anti Knockback",
+    Description = "Tenta esquivar de ataques via input ou remote",
+    Default     = false,
+})
+
+Tabs.Combat:AddSection("Visuals — ESP")
+
+Tabs.Combat:AddToggle("MobESP", {
+    Title       = "ESP: Monstros / Mobs",
+    Description = "Destaca todos os mobs com vermelho",
+    Default     = false,
+})
+
+Tabs.Combat:AddToggle("ItemESP", {
+    Title       = "ESP: Itens Raros / Míticos",
+    Description = "Destaca itens raros com dourado",
+    Default     = false,
+})
+
+Tabs.Combat:AddToggle("ResourceESP", {
+    Title       = "ESP: Recursos (Madeira, Pedra)",
+    Description = "Destaca recursos coletáveis com verde",
+    Default     = false,
+})
+
+Tabs.Combat:AddColorpicker("ESPMobColor", {
+    Title   = "Cor ESP Mobs",
+    Default = Color3.fromRGB(255, 60, 60),
+})
+
+Tabs.Combat:AddColorpicker("ESPItemColor", {
+    Title   = "Cor ESP Itens",
+    Default = Color3.fromRGB(255, 215, 0),
+})
+
+-- ╔══════════════════════════════════════╗
+-- ║   🚀  ABA 4 — MOVEMENT               ║
+-- ╚══════════════════════════════════════╝
+
+Tabs.Movement:AddSection("Speed & Jump")
+
+Tabs.Movement:AddSlider("WalkSpeed", {
+    Title       = "WalkSpeed",
+    Description = "Velocidade de movimento do personagem",
+    Default     = 16,
+    Min         = 0,
+    Max         = 350,
+    Rounding    = 0,
+    Callback    = function(v)
+        if hum then hum.WalkSpeed = v end
+    end,
+})
+
+Tabs.Movement:AddSlider("JumpPower", {
+    Title       = "JumpPower",
+    Description = "Altura do pulo",
+    Default     = 50,
+    Min         = 0,
+    Max         = 400,
+    Rounding    = 0,
+    Callback    = function(v)
+        if hum then
+            hum.UseJumpPower = true
+            hum.JumpPower = v
+        end
+    end,
+})
+
+Tabs.Movement:AddToggle("InfiniteJump", {
+    Title       = "Infinite Jump",
+    Description = "Pula infinitamente no ar",
+    Default     = false,
+})
+
+Tabs.Movement:AddSection("Flight System")
+
+Tabs.Movement:AddToggle("Fly", {
+    Title       = "Flight Mode",
+    Description = "Voa livremente. WASD + E (subir) / Q (descer)",
+    Default     = false,
+})
+
+Tabs.Movement:AddSlider("FlySpeed", {
+    Title       = "Fly Speed",
+    Description = "Velocidade do voo",
+    Default     = 80,
+    Min         = 10,
+    Max         = 500,
+    Rounding    = 0,
+})
+
+Options.Fly:OnChanged(function()
+    if Options.Fly.Value then
+        EnableFly(Options.FlySpeed.Value)
+    else
+        DisableFly()
+    end
 end)
 
--- ==========================================
--- 📦 ABA 6: MISC & EXPLOITS
--- ==========================================
+Tabs.Movement:AddSection("Clip & Phase")
+
+Tabs.Movement:AddToggle("Noclip", {
+    Title       = "Noclip",
+    Description = "Atravessa paredes e obstáculos",
+    Default     = false,
+})
+
+Tabs.Movement:AddToggle("AntiVoid", {
+    Title       = "Anti Void",
+    Description = "Teleporta de volta se cair no void",
+    Default     = false,
+})
+
+-- ╔══════════════════════════════════════╗
+-- ║   📍  ABA 5 — TELEPORTS              ║
+-- ╚══════════════════════════════════════╝
+
+Tabs.World:AddSection("Fast Travel")
+
+-- Coordenadas genéricas — ajuste conforme o mapa real do jogo
+local Locations = {
+    ["🏕 Safe Camp"]              = CFrame.new(100,   20,  100),
+    ["🌲 Deep Forest (Rare Loot)"] = CFrame.new(-1500, 10,  500),
+    ["🏚 Old Ruins"]               = CFrame.new(2000,  50, -2000),
+    ["🏆 Leaderboard Statue"]      = CFrame.new(0,      5,   0),
+    ["🌊 River / Water Source"]    = CFrame.new(-800,   8,  300),
+    ["⛰ Mountain Peak"]           = CFrame.new(500,  200, -800),
+    ["🌙 Night Safe Spot (Sky)"]   = CFrame.new(0,    500,   0),
+}
+
+local locationNames = {}
+for name in pairs(Locations) do table.insert(locationNames, name) end
+table.sort(locationNames)
+
+local WorldDropdown = Tabs.World:AddDropdown("WorldTP", {
+    Title       = "Selecionar Destino",
+    Description = "Escolha o local e pressione Teleportar",
+    Values      = locationNames,
+    Multi       = false,
+    Default     = 1,
+})
+
+Tabs.World:AddButton({
+    Title       = "⚡ Teleportar Agora",
+    Description = "Vai até o destino selecionado acima",
+    Callback    = function()
+        local dest = Options.WorldTP and Options.WorldTP.Value
+        if dest and Locations[dest] and root then
+            root.CFrame = Locations[dest]
+            Notify("Teleport", "Teleportado: " .. dest)
+        end
+    end
+})
+
+Tabs.World:AddSection("Player Teleport")
+
+local function GetPlayerList()
+    local list = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= lp then table.insert(list, p.Name) end
+    end
+    return #list > 0 and list or {"(Nenhum jogador)"}
+end
+
+local DropPlayer = Tabs.World:AddDropdown("TPToPlayer", {
+    Title   = "Teleportar para Jogador",
+    Values  = GetPlayerList(),
+    Multi   = false,
+    Default = 1,
+})
+
+Tabs.World:AddButton({
+    Title    = "TP → Jogador Selecionado",
+    Callback = function()
+        local name = Options.TPToPlayer and Options.TPToPlayer.Value
+        if not name or name == "(Nenhum jogador)" then
+            Notify("Teleport", "Selecione um jogador!") return
+        end
+        local target = Players:FindFirstChild(name)
+        local tRoot  = target and target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+        if tRoot and root then
+            root.CFrame = tRoot.CFrame + Vector3.new(0, 3, 4)
+            Notify("Teleport", "Teleportado para " .. name)
+        else
+            Notify("Teleport", "Jogador/personagem não encontrado!")
+        end
+    end
+})
+
+Tabs.World:AddButton({
+    Title    = "🔄 Atualizar Lista de Jogadores",
+    Callback = function()
+        DropPlayer:SetValues(GetPlayerList())
+        Notify("Teleport", "Lista atualizada!")
+    end
+})
+
+Tabs.World:AddSection("Quick Return")
+
+Tabs.World:AddButton({
+    Title       = "TP → Spawn",
+    Description = "Volta ao ponto de spawn do mapa",
+    Callback    = function()
+        local spawn = Workspace:FindFirstChildWhichIsA("SpawnLocation", true)
+        if spawn and root then
+            root.CFrame = spawn.CFrame + Vector3.new(0, 5, 0)
+            Notify("Teleport", "Voltou ao Spawn!")
+        else
+            if root then root.CFrame = CFrame.new(0, 5, 0) end
+            Notify("Teleport", "Spawn não encontrado — movido para origem.")
+        end
+    end
+})
+
+-- ╔══════════════════════════════════════╗
+-- ║   📦  ABA 6 — EXPLOITS / MISC        ║
+-- ╚══════════════════════════════════════╝
+
 Tabs.Misc:AddSection("Experimental")
 
 Tabs.Misc:AddButton({
-    Title = "Dupe Held Item (Glitch)",
-    Callback = function()
+    Title       = "Dupe Held Item (Glitch)",
+    Description = "Tenta duplicar o item na mão via reset de frame",
+    Callback    = function()
         Window:Dialog({
-            Title = "Atenção",
-            Content = "O Dupe exige que você drope o item e resete no frame exato. Continuar?",
-            Buttons = { {Title = "Sim", Callback = function() print("Tentando Dupe...") end}, {Title = "Cancelar"} }
+            Title   = "⚠️ Atenção — Dupe",
+            Content = "O dupe exige que você drope o item e resete no frame exato.\nEsse método é experimental e pode não funcionar em todas as versões. Continuar?",
+            Buttons = {
+                {
+                    Title    = "✅ Tentar",
+                    Callback = function()
+                        -- Método: drop o item + respawn instantâneo
+                        FireRemote("DropItem")
+                        FireRemote("Drop")
+                        task.wait(0.05)
+                        lp:LoadCharacter()
+                        Notify("Exploits", "Dupe tentado! Verifique seu inventário.")
+                    end
+                },
+                { Title = "❌ Cancelar", Callback = function() end }
+            }
         })
     end
 })
 
-Tabs.Misc:AddToggle("AutoBuild", {Title = "Infinite Storage/Build", Default = false})
+Tabs.Misc:AddToggle("AutoBuild", {
+    Title       = "Auto Build / Infinite Storage",
+    Description = "Coloca estruturas automaticamente usando remotes",
+    Default     = false,
+})
 
--- ==========================================
--- ⚙️ ABA 7: SETTINGS
--- ==========================================
+Tabs.Misc:AddToggle("Fullbright", {
+    Title       = "Fullbright / No Fog",
+    Description = "Iluminação máxima e sem névoa (útil à noite)",
+    Default     = false,
+})
+
+Tabs.Misc:AddToggle("NoTrees", {
+    Title       = "No Tree Collision",
+    Description = "Remove colisão de árvores (cliente)",
+    Default     = false,
+})
+
+Tabs.Misc:AddButton({
+    Title       = "Server Hop",
+    Description = "Troca de servidor instantaneamente",
+    Callback    = function()
+        Notify("Misc", "Trocando de servidor...")
+        task.wait(1)
+        SafeCall(function() TeleportService:Teleport(game.PlaceId, lp) end)
+    end
+})
+
+Tabs.Misc:AddButton({
+    Title       = "Rejoin (Reconectar)",
+    Description = "Sai e entra novamente no mesmo servidor",
+    Callback    = function()
+        Notify("Misc", "Reconectando...")
+        task.wait(0.5)
+        SafeCall(function()
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, lp)
+        end)
+    end
+})
+
+Tabs.Misc:AddSection("Anti-AFK")
+Tabs.Misc:AddButton({
+    Title       = "Ativar Anti-AFK",
+    Description = "Previne kick por inatividade (ativar uma vez)",
+    Callback    = function()
+        local vu = game:GetService("VirtualUser")
+        lp.Idled:Connect(function()
+            vu:Button2Down(Vector2.new(0,0), Camera.CFrame)
+            task.wait(1)
+            vu:Button2Up(Vector2.new(0,0), Camera.CFrame)
+        end)
+        Notify("Misc", "Anti-AFK ativado! ✅ Não será mais kickado.")
+    end
+})
+
+-- ╔══════════════════════════════════════╗
+-- ║        RUNTIME LOOP (Heartbeat)      ║
+-- ╚══════════════════════════════════════╝
+
+-- Tickers por feature
+local tickers = {
+    survival = 0,
+    farmWood  = 0,
+    farmFood  = 0,
+    farmStone = 0,
+    farmLoot  = 0,
+    craft     = 0,
+    killAura  = 0,
+    esp       = 0,
+    build     = 0,
+    daySkip   = 0,
+    campfire  = 0,
+}
+
+-- Keywords por tipo de recurso
+local woodKeywords     = {"Tree","Log","Wood","Branch","Stump","Trunk"}
+local foodKeywords     = {"Food","Fruit","Berry","Mushroom","Apple","Meat","Fish","Bread","Carrot","Plant","Herb"}
+local stoneKeywords    = {"Rock","Stone","Ore","Mineral","Boulder","Crystal"}
+local lootKeywords     = {"Loot","Drop","Item","Chest","Rare","Mythic","Legendary","Pickup"}
+local mobKeywords      = {"Mob","Monster","Enemy","Zombie","Skeleton","Wolf","Bear","Slime","Boss","Creature","NPC"}
+local campKeywords     = {"Campfire","Fire","Fireplace","Torch","Bonfire"}
+
+RunService.Heartbeat:Connect(function(dt)
+    local ok = root and hum and char
+
+    -- ── Speed lock ────────────────────────────────────────────────
+    if ok and Options.WalkSpeed and hum.WalkSpeed ~= Options.WalkSpeed.Value then
+        SafeCall(function() hum.WalkSpeed = Options.WalkSpeed.Value end)
+    end
+    if ok and Options.JumpPower and Options.JumpPower.Value ~= 50 then
+        SafeCall(function()
+            hum.UseJumpPower = true
+            hum.JumpPower = Options.JumpPower.Value
+        end)
+    end
+
+    -- ── God Mode ──────────────────────────────────────────────────
+    if ok and Options.GodMode and Options.GodMode.Value then
+        SafeCall(function()
+            hum.MaxHealth = math.huge
+            if hum.Health < 1e10 then hum.Health = math.huge end
+        end)
+    end
+
+    -- ── Auto-Heal ─────────────────────────────────────────────────
+    if ok and Options.AutoHeal and Options.AutoHeal.Value then
+        SafeCall(function()
+            if hum.Health < hum.MaxHealth then
+                hum.Health = hum.MaxHealth
+                FireRemote("Heal")
+                FireRemote("UsePotion")
+            end
+        end)
+    end
+
+    -- ── Noclip ────────────────────────────────────────────────────
+    if ok and Options.Noclip and Options.Noclip.Value then
+        SafeCall(function()
+            for _, p in ipairs(char:GetDescendants()) do
+                if p:IsA("BasePart") then p.CanCollide = false end
+            end
+        end)
+    end
+
+    -- ── Anti Void ─────────────────────────────────────────────────
+    if ok and Options.AntiVoid and Options.AntiVoid.Value then
+        if root.Position.Y < -80 then
+            root.CFrame = CFrame.new(root.Position.X, 50, root.Position.Z)
+        end
+    end
+
+    -- ── No Tree Collision ─────────────────────────────────────────
+    if Options.NoTrees and Options.NoTrees.Value then
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj:IsA("BasePart") then
+                for _, kw in ipairs(woodKeywords) do
+                    if obj.Name:find(kw) then obj.CanCollide = false break end
+                end
+            end
+        end
+    end
+
+    -- ── Fly movement ──────────────────────────────────────────────
+    if Options.Fly and Options.Fly.Value and FlyBV and FlyBG and root then
+        local vel = Vector3.zero
+        local spd = Options.FlySpeed and Options.FlySpeed.Value or 80
+        local cf  = Camera.CFrame
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then vel = vel + cf.LookVector  end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then vel = vel - cf.LookVector  end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then vel = vel - cf.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then vel = vel + cf.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.E) then vel = vel + Vector3.new(0,1,0) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Q) then vel = vel - Vector3.new(0,1,0) end
+        FlyBV.Velocity = vel * spd
+        FlyBG.CFrame   = cf
+    end
+
+    -- ──────────────────────────────────────────────────────────────
+    -- SURVIVAL LOOP (0.1s)
+    tickers.survival += dt
+    if tickers.survival >= 0.1 then
+        tickers.survival = 0
+
+        -- Stamina Infinita
+        if ok and Options.InfStamina and Options.InfStamina.Value then
+            SafeCall(function()
+                -- Tentativa 1: atributo direto
+                local stamina = char:FindFirstChild("Stamina", true)
+                    or lp:FindFirstChild("Stamina", true)
+                if stamina and (stamina:IsA("NumberValue") or stamina:IsA("IntValue")) then
+                    stamina.Value = 100
+                end
+                -- Tentativa 2: remote
+                FireRemote("RefillStamina")
+                FireRemote("SetStamina", 100)
+            end)
+        end
+
+        -- Auto-Eat / No Hunger
+        if ok and Options.NoHunger and Options.NoHunger.Value then
+            SafeCall(function()
+                local hunger = char:FindFirstChild("Hunger", true)
+                    or lp:FindFirstChild("Hunger", true)
+                    or char:FindFirstChild("Food", true)
+                if hunger then hunger.Value = 100 end
+                FireRemote("Eat")
+                FireRemote("AutoEat")
+                FireRemote("SetHunger", 100)
+            end)
+        end
+
+        -- AFK Safe Spot (Night Loop) — sobe ao céu no escuro
+        if ok and Options.AutoNight and Options.AutoNight.Value then
+            SafeCall(function()
+                local timeOfDay = Lighting.ClockTime
+                if timeOfDay >= 18 or timeOfDay < 6 then
+                    -- Noite: vai para o céu
+                    if root.Position.Y < 200 then
+                        root.CFrame = CFrame.new(root.Position.X, 400, root.Position.Z)
+                    end
+                else
+                    -- Dia: volta ao chão se necessário
+                    if root.Position.Y > 300 then
+                        root.CFrame = CFrame.new(root.Position.X, 5, root.Position.Z)
+                    end
+                end
+            end)
+        end
+    end
+
+    -- ──────────────────────────────────────────────────────────────
+    -- FARM LOOP (0.4s)
+    tickers.farmWood += dt
+    if tickers.farmWood >= 0.4 then
+        tickers.farmWood = 0
+        local radius = Options.FarmRadius and Options.FarmRadius.Value or 60
+
+        -- Auto Wood
+        if ok and Options.AutoWood and Options.AutoWood.Value then
+            SafeCall(function()
+                for _, obj in ipairs(Workspace:GetDescendants()) do
+                    for _, kw in ipairs(woodKeywords) do
+                        if obj.Name:find(kw) and DistTo(obj) <= radius then
+                            local p = obj:IsA("BasePart") and obj.Position
+                                   or (obj:IsA("Model") and obj.PrimaryPart and obj.PrimaryPart.Position)
+                            if p then
+                                root.CFrame = CFrame.new(p + Vector3.new(0,2,0))
+                                FireRemote("Harvest",  obj)
+                                FireRemote("ChopTree", obj)
+                                FireRemote("Collect",  obj)
+                            end
+                            break
+                        end
+                    end
+                end
+            end)
+        end
+
+        -- Auto Food
+        if ok and Options.AutoFood and Options.AutoFood.Value then
+            SafeCall(function()
+                for _, obj in ipairs(Workspace:GetDescendants()) do
+                    for _, kw in ipairs(foodKeywords) do
+                        if obj.Name:find(kw) and DistTo(obj) <= radius then
+                            local p = obj:IsA("BasePart") and obj.Position
+                                   or (obj:IsA("Model") and obj.PrimaryPart and obj.PrimaryPart.Position)
+                            if p then
+                                root.CFrame = CFrame.new(p + Vector3.new(0,2,0))
+                                FireRemote("PickUp",  obj)
+                                FireRemote("Collect", obj)
+                                FireRemote("Eat",     obj)
+                            end
+                            break
+                        end
+                    end
+                end
+            end)
+        end
+
+        -- Auto Stone
+        if ok and Options.AutoStone and Options.AutoStone.Value then
+            SafeCall(function()
+                for _, obj in ipairs(Workspace:GetDescendants()) do
+                    for _, kw in ipairs(stoneKeywords) do
+                        if obj.Name:find(kw) and DistTo(obj) <= radius then
+                            local p = obj:IsA("BasePart") and obj.Position
+                                   or (obj:IsA("Model") and obj.PrimaryPart and obj.PrimaryPart.Position)
+                            if p then
+                                root.CFrame = CFrame.new(p + Vector3.new(0,2,0))
+                                FireRemote("Mine",    obj)
+                                FireRemote("Harvest", obj)
+                                FireRemote("Collect", obj)
+                            end
+                            break
+                        end
+                    end
+                end
+            end)
+        end
+
+        -- Auto Loot
+        if ok and Options.AutoLoot and Options.AutoLoot.Value then
+            SafeCall(function()
+                for _, obj in ipairs(Workspace:GetDescendants()) do
+                    for _, kw in ipairs(lootKeywords) do
+                        if obj.Name:find(kw) and DistTo(obj) <= radius then
+                            local p = obj:IsA("BasePart") and obj.Position
+                                   or (obj:IsA("Model") and obj.PrimaryPart and obj.PrimaryPart.Position)
+                            if p then
+                                root.CFrame = CFrame.new(p + Vector3.new(0,2,0))
+                                FireRemote("PickUp",  obj)
+                                FireRemote("Collect", obj)
+                            end
+                            break
+                        end
+                    end
+                end
+            end)
+        end
+    end
+
+    -- ──────────────────────────────────────────────────────────────
+    -- AUTO CRAFT (1s)
+    tickers.craft += dt
+    if tickers.craft >= 1 then
+        tickers.craft = 0
+        if ok and Options.AutoCraft and Options.AutoCraft.Value then
+            SafeCall(function()
+                FireRemote("AutoCraft")
+                FireRemote("CraftAll")
+                FireRemote("Craft")
+            end)
+        end
+    end
+
+    -- ──────────────────────────────────────────────────────────────
+    -- KILL AURA (0.2s)
+    tickers.killAura += dt
+    if tickers.killAura >= 0.2 then
+        tickers.killAura = 0
+        if ok and Options.KillAura and Options.KillAura.Value then
+            local range = Options.KillAuraRange and Options.KillAuraRange.Value or 25
+            SafeCall(function()
+                for _, obj in ipairs(Workspace:GetDescendants()) do
+                    if obj:IsA("Model") and obj ~= char then
+                        local mobHum = obj:FindFirstChildOfClass("Humanoid")
+                        if mobHum and mobHum.Health > 0 then
+                            local mobRoot = obj:FindFirstChild("HumanoidRootPart")
+                                or obj:FindFirstChildOfClass("BasePart")
+                            if mobRoot then
+                                local dist = (root.Position - mobRoot.Position).Magnitude
+                                if dist <= range then
+                                    FireRemote("Attack", obj)
+                                    FireRemote("Hit",    obj)
+                                    FireRemote("Damage", obj)
+                                    -- Teleporta ao mob e clica
+                                    root.CFrame = CFrame.new(mobRoot.Position + Vector3.new(0,2,0))
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+
+    -- ──────────────────────────────────────────────────────────────
+    -- ESP UPDATE (0.5s)
+    tickers.esp += dt
+    if tickers.esp >= 0.5 then
+        tickers.esp = 0
+
+        -- Mob ESP
+        if Options.MobESP and Options.MobESP.Value then
+            local mobColor = Options.ESPMobColor and Options.ESPMobColor.Value or Color3.fromRGB(255,60,60)
+            for _, obj in ipairs(Workspace:GetDescendants()) do
+                if obj:IsA("Model") and obj ~= char then
+                    local mobHum = obj:FindFirstChildOfClass("Humanoid")
+                    if mobHum then
+                        AddHighlight(obj, mobColor, Color3.new(1,1,1))
+                    end
+                end
+            end
+        else
+            -- Limpar apenas mob highlights (não item)
+            for obj, h in pairs(ESPHighlights) do
+                if obj:IsA("Model") then
+                    local mobHum = obj:FindFirstChildOfClass("Humanoid")
+                    if mobHum then RemoveHighlight(obj) end
+                end
+            end
+        end
+
+        -- Item ESP
+        if Options.ItemESP and Options.ItemESP.Value then
+            local itemColor = Options.ESPItemColor and Options.ESPItemColor.Value or Color3.fromRGB(255,215,0)
+            for _, obj in ipairs(Workspace:GetDescendants()) do
+                for _, kw in ipairs(lootKeywords) do
+                    if obj.Name:find(kw) then
+                        AddHighlight(obj, itemColor, Color3.fromRGB(255,255,0))
+                        break
+                    end
+                end
+            end
+        end
+
+        -- Resource ESP
+        if Options.ResourceESP and Options.ResourceESP.Value then
+            local allRes = {}
+            for _, t in ipairs({woodKeywords, stoneKeywords, foodKeywords}) do
+                for _, kw in ipairs(t) do table.insert(allRes, kw) end
+            end
+            for _, obj in ipairs(Workspace:GetDescendants()) do
+                for _, kw in ipairs(allRes) do
+                    if obj.Name:find(kw) then
+                        AddHighlight(obj, Color3.fromRGB(60,220,60), Color3.new(1,1,1))
+                        break
+                    end
+                end
+            end
+        else
+            -- Limpar resource ESP se desativado
+            if not Options.MobESP.Value and not Options.ItemESP.Value then
+                ClearAllESP()
+            end
+        end
+    end
+
+    -- ──────────────────────────────────────────────────────────────
+    -- AUTO BUILD (2s)
+    tickers.build += dt
+    if tickers.build >= 2 then
+        tickers.build = 0
+        if ok and Options.AutoBuild and Options.AutoBuild.Value then
+            SafeCall(function()
+                FireRemote("AutoBuild")
+                FireRemote("Build")
+                FireRemote("PlaceStructure")
+                -- Click GUI build buttons
+                local gui = lp:FindFirstChild("PlayerGui")
+                if gui then
+                    for _, btn in ipairs(gui:GetDescendants()) do
+                        if (btn:IsA("TextButton") or btn:IsA("ImageButton"))
+                          and btn.Name:lower():find("build") then
+                            SafeCall(function() btn.MouseButton1Click:Fire() end)
+                        end
+                    end
+                end
+            end)
+        end
+    end
+
+    -- ──────────────────────────────────────────────────────────────
+    -- DAY SKIP (3s)
+    tickers.daySkip += dt
+    if tickers.daySkip >= 3 then
+        tickers.daySkip = 0
+        if ok and Options.AutoDaySkip and Options.AutoDaySkip.Value then
+            SafeCall(function()
+                FireRemote("SkipDay")
+                FireRemote("NextDay")
+                FireRemote("SkipNight")
+            end)
+        end
+    end
+
+    -- ──────────────────────────────────────────────────────────────
+    -- AUTO CAMPFIRE (1s)
+    tickers.campfire += dt
+    if tickers.campfire >= 1 then
+        tickers.campfire = 0
+        if ok and Options.AutoCampfire and Options.AutoCampfire.Value then
+            SafeCall(function()
+                for _, obj in ipairs(Workspace:GetDescendants()) do
+                    for _, kw in ipairs(campKeywords) do
+                        if obj.Name:find(kw) then
+                            local p = obj:IsA("BasePart") and obj.Position
+                                   or (obj:IsA("Model") and obj.PrimaryPart and obj.PrimaryPart.Position)
+                            if p and (root.Position - p).Magnitude <= 150 then
+                                FireRemote("LightFire",    obj)
+                                FireRemote("UseCampfire",  obj)
+                                FireRemote("Interact",     obj)
+                            end
+                            break
+                        end
+                    end
+                end
+            end)
+        end
+    end
+
+    -- ──────────────────────────────────────────────────────────────
+    -- FULLBRIGHT (live)
+    if Options.Fullbright and Options.Fullbright.Value then
+        SafeCall(function()
+            Lighting.Brightness    = 10
+            Lighting.ClockTime     = 14
+            Lighting.FogEnd        = 100000
+            Lighting.FogStart      = 99999
+            Lighting.GlobalShadows = false
+            Lighting.Ambient       = Color3.fromRGB(178,178,178)
+        end)
+    end
+end)
+
+-- ── Infinite Jump ─────────────────────────────────────────────────
+UserInputService.JumpRequest:Connect(function()
+    if Options.InfiniteJump and Options.InfiniteJump.Value and hum then
+        hum:ChangeState(Enum.HumanoidStateType.Jumping)
+    end
+end)
+
+-- ── Auto Dodge (V key) ────────────────────────────────────────────
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if Options.AutoDodge and Options.AutoDodge.Value then
+        FireRemote("Dodge")
+        FireRemote("Roll")
+        FireRemote("Evade")
+    end
+end)
+
+-- ── Re-enable on respawn ──────────────────────────────────────────
+lp.CharacterAdded:Connect(function(newChar)
+    task.wait(1.5)
+    RefreshChar()
+    if Options.WalkSpeed and hum then hum.WalkSpeed = Options.WalkSpeed.Value end
+    if Options.JumpPower  and hum then
+        hum.UseJumpPower = true
+        hum.JumpPower    = Options.JumpPower.Value
+    end
+    if Options.Fly and Options.Fly.Value then
+        task.wait(0.5)
+        EnableFly()
+    end
+    if Options.GodMode and Options.GodMode.Value and hum then
+        hum.MaxHealth = math.huge
+        hum.Health    = math.huge
+    end
+end)
+
+-- ╔══════════════════════════════════════╗
+-- ║       ⚙️  SETTINGS TAB              ║
+-- ╚══════════════════════════════════════╝
+
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
 SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({})
 InterfaceManager:SetFolder("99NightsEternal")
-SaveManager:SetFolder("99NightsEternal/config")
+SaveManager:SetFolder("99NightsEternal/configs")
 InterfaceManager:BuildInterfaceSection(Tabs.Settings)
 SaveManager:BuildConfigSection(Tabs.Settings)
 
 Window:SelectTab(1)
-Fluent:Notify({Title = "Eternal Hub", Content = "Script carregado com sucesso!", Duration = 5})
 SaveManager:LoadAutoloadConfig()
+
+Fluent:Notify({
+    Title   = "⚔️ 99 Nights Hub v4.0",
+    Content = "Script carregado! RCtrl para minimizar.",
+    Duration = 7
+})
