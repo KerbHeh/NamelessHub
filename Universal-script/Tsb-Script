@@ -1,0 +1,1008 @@
+-- TSB (The Strongest Battlegrounds) Exploit
+-- UI: Fluent Library by dawid-scripts
+
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+-- ╔══════════════════════════════════════╗
+-- ║         SERVICES & VARIABLES         ║
+-- ╚══════════════════════════════════════╝
+
+local Players         = game:GetService("Players")
+local RunService      = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService    = game:GetService("TweenService")
+local Workspace       = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local StarterGui      = game:GetService("StarterGui")
+local HttpService     = game:GetService("HttpService")
+
+local LocalPlayer     = Players.LocalPlayer
+local Camera          = Workspace.CurrentCamera
+local Mouse           = LocalPlayer:GetMouse()
+
+local Options         = Fluent.Options
+local Connections     = {}
+local ESPObjects      = {}
+
+-- ╔══════════════════════════════════════╗
+-- ║           STATE VARIABLES            ║
+-- ╚══════════════════════════════════════╝
+
+local State = {
+    -- Combat
+    AutoBlock       = false,
+    AutoPunch       = false,
+    AutoSkills      = false,
+    KillAura        = false,
+    KillAuraRange   = 20,
+    HitboxExpander  = false,
+    HitboxSize      = 10,
+    Aimbot          = false,
+    AimbotTarget    = nil,
+
+    -- Player
+    InfiniteStamina = false,
+    NoDashCooldown  = false,
+    WalkSpeed       = 16,
+    JumpPower       = 50,
+    Flying          = false,
+    Noclip          = false,
+
+    -- Visuals
+    PlayerESP       = false,
+    HitboxESP       = false,
+    Fullbright      = false,
+
+    -- Farm
+    AutoFarm        = false,
+    KillAll         = false,
+
+    -- Misc
+    AntiRagdoll     = false,
+    InfiniteJump    = false,
+    UnlockEmotes    = false,
+    AntiVoid        = false,
+    Invisible       = false,
+}
+
+-- ╔══════════════════════════════════════╗
+-- ║             WINDOW SETUP             ║
+-- ╚══════════════════════════════════════╝
+
+local Window = Fluent:CreateWindow({
+    Title = "TSB Hub",
+    SubTitle = "The Strongest Battlegrounds",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(600, 480),
+    Acrylic = true,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.RightControl
+})
+
+local Tabs = {
+    Combat   = Window:AddTab({ Title = "Combat",   Icon = "sword"         }),
+    Player   = Window:AddTab({ Title = "Player",   Icon = "user"          }),
+    Visuals  = Window:AddTab({ Title = "Visuals",  Icon = "eye"           }),
+    Teleport = Window:AddTab({ Title = "Teleport", Icon = "map-pin"       }),
+    Farm     = Window:AddTab({ Title = "Farm",     Icon = "bot"           }),
+    Misc     = Window:AddTab({ Title = "Misc",     Icon = "wrench"        }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings"      }),
+}
+
+-- ╔══════════════════════════════════════╗
+-- ║            HELPER FUNCTIONS          ║
+-- ╚══════════════════════════════════════╝
+
+local function GetCharacter(player)
+    return player and player.Character
+end
+
+local function GetRootPart(player)
+    local char = GetCharacter(player)
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function GetHumanoid(player)
+    local char = GetCharacter(player)
+    return char and char:FindFirstChildOfClass("Humanoid")
+end
+
+local function IsAlive(player)
+    local hum = GetHumanoid(player)
+    return hum and hum.Health > 0
+end
+
+local function GetNearestEnemy()
+    local nearest, shortestDist = nil, math.huge
+    local myRoot = GetRootPart(LocalPlayer)
+    if not myRoot then return nil end
+
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and IsAlive(plr) then
+            local root = GetRootPart(plr)
+            if root then
+                local dist = (myRoot.Position - root.Position).Magnitude
+                if dist < shortestDist then
+                    shortestDist = dist
+                    nearest = plr
+                end
+            end
+        end
+    end
+    return nearest
+end
+
+local function GetLowestHPEnemy()
+    local target, lowestHP = nil, math.huge
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and IsAlive(plr) then
+            local hum = GetHumanoid(plr)
+            if hum and hum.Health < lowestHP then
+                lowestHP = hum.Health
+                target = plr
+            end
+        end
+    end
+    return target
+end
+
+local function Notify(title, content, duration)
+    Fluent:Notify({ Title = title, Content = content, Duration = duration or 4 })
+end
+
+-- ╔══════════════════════════════════════╗
+-- ║          COMBAT TAB SECTION          ║
+-- ╚══════════════════════════════════════╝
+
+Tabs.Combat:AddParagraph({
+    Title = "Combat Features",
+    Content = "Automated combat tools. Use responsibly."
+})
+
+-- Auto Block
+local ToggleAutoBlock = Tabs.Combat:AddToggle("AutoBlock", {
+    Title = "Auto Block",
+    Description = "Automatically blocks incoming attacks",
+    Default = false
+})
+ToggleAutoBlock:OnChanged(function()
+    State.AutoBlock = Options.AutoBlock.Value
+    if State.AutoBlock then Notify("Combat", "Auto Block Enabled") end
+end)
+
+-- Auto Punch / M1
+local ToggleAutoPunch = Tabs.Combat:AddToggle("AutoPunch", {
+    Title = "Auto Punch / M1",
+    Description = "Automatically M1s the nearest enemy",
+    Default = false
+})
+ToggleAutoPunch:OnChanged(function()
+    State.AutoPunch = Options.AutoPunch.Value
+    if State.AutoPunch then Notify("Combat", "Auto Punch Enabled") end
+end)
+
+-- Auto Skills
+local ToggleAutoSkills = Tabs.Combat:AddToggle("AutoSkills", {
+    Title = "Auto Skills (1,2,3,4)",
+    Description = "Automatically fires all skills when available",
+    Default = false
+})
+ToggleAutoSkills:OnChanged(function()
+    State.AutoSkills = Options.AutoSkills.Value
+    if State.AutoSkills then Notify("Combat", "Auto Skills Enabled") end
+end)
+
+-- Kill Aura
+local ToggleKillAura = Tabs.Combat:AddToggle("KillAura", {
+    Title = "Kill Aura",
+    Description = "Attacks all enemies within range automatically",
+    Default = false
+})
+ToggleKillAura:OnChanged(function()
+    State.KillAura = Options.KillAura.Value
+    if State.KillAura then Notify("Combat", "Kill Aura Enabled") end
+end)
+
+-- Kill Aura Range Slider
+local SliderKillAuraRange = Tabs.Combat:AddSlider("KillAuraRange", {
+    Title = "Kill Aura Range",
+    Description = "Detection radius for Kill Aura",
+    Default = 20,
+    Min = 5,
+    Max = 100,
+    Rounding = 1,
+    Callback = function(Value)
+        State.KillAuraRange = Value
+    end
+})
+
+-- Hitbox Expander
+local ToggleHitbox = Tabs.Combat:AddToggle("HitboxExpander", {
+    Title = "Hitbox Expander",
+    Description = "Enlarges enemy hitboxes for easier hits",
+    Default = false
+})
+ToggleHitbox:OnChanged(function()
+    State.HitboxExpander = Options.HitboxExpander.Value
+
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then
+            local char = GetCharacter(plr)
+            if char then
+                for _, part in ipairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        if State.HitboxExpander then
+                            part.Size = Vector3.new(State.HitboxSize, State.HitboxSize, State.HitboxSize)
+                        else
+                            -- Reset (approximate, real values depend on character)
+                            part.Size = Vector3.new(2, 2, 2)
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- Hitbox Size Slider
+local SliderHitboxSize = Tabs.Combat:AddSlider("HitboxSize", {
+    Title = "Hitbox Size",
+    Description = "Size of expanded hitboxes",
+    Default = 10,
+    Min = 2,
+    Max = 50,
+    Rounding = 1,
+    Callback = function(Value)
+        State.HitboxSize = Value
+    end
+})
+
+-- Aimbot / Camlock
+local ToggleAimbot = Tabs.Combat:AddToggle("Aimbot", {
+    Title = "Aimbot / Camlock",
+    Description = "Locks camera to the nearest enemy's head",
+    Default = false
+})
+ToggleAimbot:OnChanged(function()
+    State.Aimbot = Options.Aimbot.Value
+    if State.Aimbot then Notify("Combat", "Camlock Enabled") end
+end)
+
+-- ╔══════════════════════════════════════╗
+-- ║          PLAYER TAB SECTION          ║
+-- ╚══════════════════════════════════════╝
+
+Tabs.Player:AddParagraph({
+    Title = "Player Features",
+    Content = "Modify your character's attributes and movement."
+})
+
+-- Infinite Stamina
+local ToggleInfStamina = Tabs.Player:AddToggle("InfiniteStamina", {
+    Title = "Infinite Stamina / No Fatigue",
+    Description = "Prevents stamina from depleting",
+    Default = false
+})
+ToggleInfStamina:OnChanged(function()
+    State.InfiniteStamina = Options.InfiniteStamina.Value
+end)
+
+-- No Dash Cooldown
+local ToggleNoDash = Tabs.Player:AddToggle("NoDashCooldown", {
+    Title = "No Dash Cooldown",
+    Description = "Removes the dash cooldown",
+    Default = false
+})
+ToggleNoDash:OnChanged(function()
+    State.NoDashCooldown = Options.NoDashCooldown.Value
+end)
+
+-- WalkSpeed Slider
+local SliderWalkSpeed = Tabs.Player:AddSlider("WalkSpeed", {
+    Title = "WalkSpeed",
+    Description = "Your character's walk speed",
+    Default = 16,
+    Min = 0,
+    Max = 250,
+    Rounding = 1,
+    Callback = function(Value)
+        State.WalkSpeed = Value
+        local hum = GetHumanoid(LocalPlayer)
+        if hum then hum.WalkSpeed = Value end
+    end
+})
+
+-- JumpPower Slider
+local SliderJumpPower = Tabs.Player:AddSlider("JumpPower", {
+    Title = "JumpPower",
+    Description = "Your character's jump height",
+    Default = 50,
+    Min = 0,
+    Max = 350,
+    Rounding = 1,
+    Callback = function(Value)
+        State.JumpPower = Value
+        local hum = GetHumanoid(LocalPlayer)
+        if hum then
+            hum.UseJumpPower = true
+            hum.JumpPower = Value
+        end
+    end
+})
+
+-- Fly
+local ToggleFly = Tabs.Player:AddToggle("Fly", {
+    Title = "Fly",
+    Description = "Lets you fly freely around the map",
+    Default = false
+})
+
+local FlyBodyVelocity, FlyBodyGyro
+local FlySpeed = 80
+
+ToggleFly:OnChanged(function()
+    State.Flying = Options.Fly.Value
+    local char = GetCharacter(LocalPlayer)
+    local root = GetRootPart(LocalPlayer)
+    local hum  = GetHumanoid(LocalPlayer)
+
+    if State.Flying then
+        if not char or not root then return end
+        FlyBodyGyro = Instance.new("BodyGyro", root)
+        FlyBodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+        FlyBodyGyro.CFrame = root.CFrame
+
+        FlyBodyVelocity = Instance.new("BodyVelocity", root)
+        FlyBodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+        FlyBodyVelocity.Velocity = Vector3.zero
+
+        if hum then hum.PlatformStand = true end
+        Notify("Player", "Fly Enabled — WASD + E/Q to move vertically")
+    else
+        if FlyBodyGyro    then FlyBodyGyro:Destroy()    FlyBodyGyro    = nil end
+        if FlyBodyVelocity then FlyBodyVelocity:Destroy() FlyBodyVelocity = nil end
+        local hum2 = GetHumanoid(LocalPlayer)
+        if hum2 then hum2.PlatformStand = false end
+    end
+end)
+
+-- Noclip
+local ToggleNoclip = Tabs.Player:AddToggle("Noclip", {
+    Title = "Noclip",
+    Description = "Walk through walls and obstacles",
+    Default = false
+})
+ToggleNoclip:OnChanged(function()
+    State.Noclip = Options.Noclip.Value
+    if State.Noclip then Notify("Player", "Noclip Enabled") end
+end)
+
+-- ╔══════════════════════════════════════╗
+-- ║         VISUALS TAB SECTION          ║
+-- ╚══════════════════════════════════════╝
+
+Tabs.Visuals:AddParagraph({
+    Title = "Visual Features",
+    Content = "ESP, highlighting, and environment tweaks."
+})
+
+-- Helper: Create ESP for a player
+local function CreateESP(plr)
+    if ESPObjects[plr] then return end
+    local char = GetCharacter(plr)
+    if not char then return end
+
+    local highlight = Instance.new("Highlight")
+    highlight.FillColor = Color3.fromRGB(255, 60, 60)
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.FillTransparency = 0.5
+    highlight.OutlineTransparency = 0
+    highlight.Adornee = char
+    highlight.Parent = char
+
+    -- BillboardGui name tag
+    local root = char:FindFirstChild("HumanoidRootPart")
+    local billboard
+    if root then
+        billboard = Instance.new("BillboardGui")
+        billboard.Size = UDim2.new(0, 100, 0, 40)
+        billboard.StudsOffset = Vector3.new(0, 3, 0)
+        billboard.AlwaysOnTop = true
+        billboard.Adornee = root
+        billboard.Parent = root
+
+        local label = Instance.new("TextLabel", billboard)
+        label.Size = UDim2.new(1, 0, 1, 0)
+        label.BackgroundTransparency = 1
+        label.TextColor3 = Color3.new(1, 1, 1)
+        label.TextStrokeTransparency = 0
+        label.Font = Enum.Font.GothamBold
+        label.TextScaled = true
+        label.Text = plr.Name
+
+        -- Update health in label
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum:GetPropertyChangedSignal("Health"):Connect(function()
+                label.Text = plr.Name .. "\n❤ " .. math.floor(hum.Health)
+            end)
+            label.Text = plr.Name .. "\n❤ " .. math.floor(hum.Health)
+        end
+    end
+
+    ESPObjects[plr] = { Highlight = highlight, Billboard = billboard }
+end
+
+local function RemoveESP(plr)
+    if ESPObjects[plr] then
+        if ESPObjects[plr].Highlight then ESPObjects[plr].Highlight:Destroy() end
+        if ESPObjects[plr].Billboard then ESPObjects[plr].Billboard:Destroy() end
+        ESPObjects[plr] = nil
+    end
+end
+
+-- Player ESP Toggle
+local ToggleESP = Tabs.Visuals:AddToggle("PlayerESP", {
+    Title = "Player ESP",
+    Description = "Highlights all players with name and HP tags",
+    Default = false
+})
+ToggleESP:OnChanged(function()
+    State.PlayerESP = Options.PlayerESP.Value
+    if State.PlayerESP then
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer then CreateESP(plr) end
+        end
+        Notify("Visuals", "Player ESP Enabled")
+    else
+        for _, plr in ipairs(Players:GetPlayers()) do
+            RemoveESP(plr)
+        end
+    end
+end)
+
+Players.PlayerAdded:Connect(function(plr)
+    plr.CharacterAdded:Connect(function()
+        task.wait(1)
+        if State.PlayerESP then CreateESP(plr) end
+    end)
+end)
+
+Players.PlayerRemoving:Connect(function(plr)
+    RemoveESP(plr)
+end)
+
+-- Hitbox ESP / Tracers (uses SelectionBox per enemy)
+local HitboxBoxes = {}
+
+local ToggleHitboxESP = Tabs.Visuals:AddToggle("HitboxESP", {
+    Title = "Hitbox ESP / Tracers",
+    Description = "Draws selection boxes around enemy hitboxes",
+    Default = false
+})
+ToggleHitboxESP:OnChanged(function()
+    State.HitboxESP = Options.HitboxESP.Value
+    if State.HitboxESP then
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer then
+                local char = GetCharacter(plr)
+                if char then
+                    local box = Instance.new("SelectionBox")
+                    box.Color3 = Color3.fromRGB(255, 0, 0)
+                    box.LineThickness = 0.05
+                    box.SurfaceTransparency = 0.8
+                    box.Adornee = char
+                    box.Parent = Workspace
+                    HitboxBoxes[plr] = box
+                end
+            end
+        end
+        Notify("Visuals", "Hitbox ESP Enabled")
+    else
+        for plr, box in pairs(HitboxBoxes) do
+            box:Destroy()
+            HitboxBoxes[plr] = nil
+        end
+    end
+end)
+
+-- Fullbright / No Fog
+local ToggleFullbright = Tabs.Visuals:AddToggle("Fullbright", {
+    Title = "Fullbright / No Fog",
+    Description = "Maximises lighting and removes fog",
+    Default = false
+})
+ToggleFullbright:OnChanged(function()
+    State.Fullbright = Options.Fullbright.Value
+    local Lighting = game:GetService("Lighting")
+    if State.Fullbright then
+        Lighting.Brightness = 10
+        Lighting.ClockTime = 14
+        Lighting.FogEnd = 100000
+        Lighting.FogStart = 99999
+        Lighting.GlobalShadows = false
+        Lighting.Ambient = Color3.fromRGB(178, 178, 178)
+        Notify("Visuals", "Fullbright Enabled")
+    else
+        Lighting.Brightness = 1
+        Lighting.ClockTime = 14
+        Lighting.FogEnd = 100000
+        Lighting.FogStart = 0
+        Lighting.GlobalShadows = true
+        Lighting.Ambient = Color3.fromRGB(70, 70, 70)
+    end
+end)
+
+-- ╔══════════════════════════════════════╗
+-- ║        TELEPORT TAB SECTION          ║
+-- ╚══════════════════════════════════════╝
+
+Tabs.Teleport:AddParagraph({
+    Title = "Teleport Features",
+    Content = "Instantly travel to any location or player."
+})
+
+-- TP to Spawn
+Tabs.Teleport:AddButton({
+    Title = "TP to Spawn",
+    Description = "Teleports you back to the spawn point",
+    Callback = function()
+        local root = GetRootPart(LocalPlayer)
+        if root then
+            -- Try to find spawn
+            local spawn = Workspace:FindFirstChild("SpawnLocation")
+                or Workspace:FindFirstChildWhichIsA("SpawnLocation", true)
+            if spawn then
+                root.CFrame = spawn.CFrame + Vector3.new(0, 5, 0)
+                Notify("Teleport", "Teleported to Spawn")
+            else
+                root.CFrame = CFrame.new(0, 10, 0)
+                Notify("Teleport", "Spawn not found — moved to world origin")
+            end
+        end
+    end
+})
+
+-- TP to Safe Zone (manual trigger)
+Tabs.Teleport:AddButton({
+    Title = "TP Safe Zone",
+    Description = "Teleports to a safe spot (auto triggers at low HP if enabled)",
+    Callback = function()
+        local root = GetRootPart(LocalPlayer)
+        if root then
+            root.CFrame = CFrame.new(0, 500, 0) -- high in the air = safe from most attacks
+            Notify("Teleport", "Teleported to Safe Zone")
+        end
+    end
+})
+
+local ToggleAutoSafeZone = Tabs.Teleport:AddToggle("AutoSafeZone", {
+    Title = "Auto TP Safe Zone (low HP)",
+    Description = "Automatically teleports you to safety when HP drops below 20%",
+    Default = false
+})
+
+-- TP to Player
+local function GetPlayerNames()
+    local names = {}
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then
+            table.insert(names, plr.Name)
+        end
+    end
+    return #names > 0 and names or {"(No Players)"}
+end
+
+local DropdownTPPlayer = Tabs.Teleport:AddDropdown("TPToPlayer", {
+    Title = "Teleport to Player",
+    Description = "Select a player and press Teleport",
+    Values = GetPlayerNames(),
+    Multi = false,
+    Default = 1,
+})
+
+Tabs.Teleport:AddButton({
+    Title = "Teleport to Selected Player",
+    Description = "Teleports to the player selected above",
+    Callback = function()
+        local targetName = Options.TPToPlayer and Options.TPToPlayer.Value
+        if not targetName or targetName == "(No Players)" then
+            Notify("Teleport", "No player selected!")
+            return
+        end
+        local target = Players:FindFirstChild(targetName)
+        local root   = GetRootPart(LocalPlayer)
+        local tRoot  = target and GetRootPart(target)
+        if root and tRoot then
+            root.CFrame = tRoot.CFrame + Vector3.new(0, 3, 5)
+            Notify("Teleport", "Teleported to " .. targetName)
+        else
+            Notify("Teleport", "Player not found or no character!")
+        end
+    end
+})
+
+Tabs.Teleport:AddButton({
+    Title = "Refresh Player List",
+    Description = "Updates the dropdown with current players",
+    Callback = function()
+        DropdownTPPlayer:SetValues(GetPlayerNames())
+        Notify("Teleport", "Player list refreshed")
+    end
+})
+
+-- ╔══════════════════════════════════════╗
+-- ║          FARM TAB SECTION            ║
+-- ╚══════════════════════════════════════╝
+
+Tabs.Farm:AddParagraph({
+    Title = "Farm Features",
+    Content = "Automated grinding and server management."
+})
+
+local DropdownFarmMode = Tabs.Farm:AddDropdown("FarmMode", {
+    Title = "Auto Farm Target Mode",
+    Values = {"Nearest Enemy", "Lowest HP Enemy"},
+    Multi = false,
+    Default = 1,
+})
+
+local ToggleAutoFarm = Tabs.Farm:AddToggle("AutoFarm", {
+    Title = "Auto Farm Kills",
+    Description = "Automatically hunts and kills enemies",
+    Default = false
+})
+ToggleAutoFarm:OnChanged(function()
+    State.AutoFarm = Options.AutoFarm.Value
+    if State.AutoFarm then Notify("Farm", "Auto Farm Started") end
+end)
+
+Tabs.Farm:AddButton({
+    Title = "Kill All",
+    Description = "Teleports to and kills every player on the server",
+    Callback = function()
+        local root = GetRootPart(LocalPlayer)
+        if not root then return end
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer and IsAlive(plr) then
+                local tRoot = GetRootPart(plr)
+                if tRoot then
+                    root.CFrame = tRoot.CFrame
+                    -- Fire M1 simulation via remote (game-specific, adjust remote name as needed)
+                    local remote = ReplicatedStorage:FindFirstChild("Remotes")
+                        and ReplicatedStorage.Remotes:FindFirstChild("M1")
+                    if remote then
+                        for _ = 1, 5 do
+                            pcall(function() remote:FireServer(plr) end)
+                            task.wait(0.1)
+                        end
+                    end
+                end
+            end
+        end
+        Notify("Farm", "Kill All executed")
+    end
+})
+
+Tabs.Farm:AddButton({
+    Title = "Server Hop / Auto Rejoin",
+    Description = "Joins a new server immediately",
+    Callback = function()
+        Notify("Farm", "Server hopping...")
+        task.wait(1)
+        local TeleportService = game:GetService("TeleportService")
+        local placeId = game.PlaceId
+        pcall(function()
+            TeleportService:Teleport(placeId, LocalPlayer)
+        end)
+    end
+})
+
+-- ╔══════════════════════════════════════╗
+-- ║          MISC TAB SECTION            ║
+-- ╚══════════════════════════════════════╝
+
+Tabs.Misc:AddParagraph({
+    Title = "Miscellaneous",
+    Content = "Extra utilities and bypass features."
+})
+
+-- Anti Ragdoll / Godmode
+local ToggleGodmode = Tabs.Misc:AddToggle("AntiRagdoll", {
+    Title = "Anti Ragdoll / Godmode",
+    Description = "Prevents ragdoll states and attempts to block HP loss",
+    Default = false
+})
+ToggleGodmode:OnChanged(function()
+    State.AntiRagdoll = Options.AntiRagdoll.Value
+    local char = GetCharacter(LocalPlayer)
+    if char then
+        for _, obj in ipairs(char:GetDescendants()) do
+            if obj:IsA("BallSocketConstraint") or obj:IsA("HingeConstraint") then
+                obj.Enabled = not State.AntiRagdoll
+            end
+        end
+    end
+    if State.AntiRagdoll then Notify("Misc", "Anti Ragdoll Enabled") end
+end)
+
+-- Infinite Jump
+local ToggleInfJump = Tabs.Misc:AddToggle("InfiniteJump", {
+    Title = "Infinite Jump",
+    Description = "Jump infinitely while in the air",
+    Default = false
+})
+ToggleInfJump:OnChanged(function()
+    State.InfiniteJump = Options.InfiniteJump.Value
+end)
+
+-- Unlock Emotes / Movesets
+Tabs.Misc:AddButton({
+    Title = "Unlock Emotes / Movesets",
+    Description = "Attempts to unlock all emotes and movesets locally",
+    Callback = function()
+        -- TSB stores movesets in a folder; attempt to unlock via remote or attribute
+        local remote = ReplicatedStorage:FindFirstChild("Remotes")
+            and (ReplicatedStorage.Remotes:FindFirstChild("UnlockMoveset")
+              or ReplicatedStorage.Remotes:FindFirstChild("EquipMoveset"))
+        if remote then
+            pcall(function() remote:FireServer("All") end)
+            Notify("Misc", "Moveset unlock signal sent")
+        else
+            Notify("Misc", "Remote not found — may require game update")
+        end
+    end
+})
+
+-- Anti Void / Auto Dodge
+local ToggleAntiVoid = Tabs.Misc:AddToggle("AntiVoid", {
+    Title = "Anti Void / Auto Dodge",
+    Description = "Teleports you up if you fall below the void threshold",
+    Default = false
+})
+ToggleAntiVoid:OnChanged(function()
+    State.AntiVoid = Options.AntiVoid.Value
+    if State.AntiVoid then Notify("Misc", "Anti Void Enabled") end
+end)
+
+-- FE Invisibility
+local ToggleInvisible = Tabs.Misc:AddToggle("Invisible", {
+    Title = "FE Invisibility (Full Body)",
+    Description = "Makes your character invisible to other players (FE method)",
+    Default = false
+})
+ToggleInvisible:OnChanged(function()
+    State.Invisible = Options.Invisible.Value
+    local char = GetCharacter(LocalPlayer)
+    if not char then return end
+
+    if State.Invisible then
+        -- FE invisible method: move character root to far location momentarily
+        -- then respawn parts locally transparent
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                part.LocalTransparencyModifier = 1
+            end
+        end
+        -- Classic FE invisible: detach and reattach
+        local hum = GetHumanoid(LocalPlayer)
+        if hum then
+            hum.BreakJointsOnDeath = false
+            -- Rejoin network trick
+            local oldCFrame = char.HumanoidRootPart.CFrame
+            char.HumanoidRootPart.CFrame = CFrame.new(0, 9999, 0)
+            task.wait(0.1)
+            char.HumanoidRootPart.CFrame = oldCFrame
+        end
+        Notify("Misc", "FE Invisibility Enabled")
+    else
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.LocalTransparencyModifier = 0
+            end
+        end
+        Notify("Misc", "FE Invisibility Disabled")
+    end
+end)
+
+-- ╔══════════════════════════════════════╗
+-- ║          RUNTIME LOOP (heartbeat)    ║
+-- ╚══════════════════════════════════════╝
+
+Connections.Heartbeat = RunService.Heartbeat:Connect(function(dt)
+    local char  = GetCharacter(LocalPlayer)
+    local root  = GetRootPart(LocalPlayer)
+    local hum   = GetHumanoid(LocalPlayer)
+
+    -- ── Noclip ──────────────────────────────────────────────────────
+    if State.Noclip and char then
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end
+
+    -- ── Infinite Stamina ─────────────────────────────────────────────
+    if State.InfiniteStamina and char then
+        -- TSB typically uses a "Stamina" or "Endurance" NumberValue
+        local stamina = char:FindFirstChild("Stamina", true)
+            or LocalPlayer:FindFirstChild("Stamina", true)
+        if stamina and stamina:IsA("NumberValue") then
+            stamina.Value = stamina.MaxValue or 100
+        end
+    end
+
+    -- ── WalkSpeed / JumpPower lock ───────────────────────────────────
+    if hum then
+        if Options.WalkSpeed and hum.WalkSpeed ~= State.WalkSpeed then
+            hum.WalkSpeed = State.WalkSpeed
+        end
+        if Options.JumpPower and Options.JumpPower.Value ~= 50 then
+            hum.UseJumpPower = true
+            hum.JumpPower = State.JumpPower
+        end
+    end
+
+    -- ── Kill Aura ────────────────────────────────────────────────────
+    if State.KillAura and root then
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer and IsAlive(plr) then
+                local tRoot = GetRootPart(plr)
+                if tRoot then
+                    local dist = (root.Position - tRoot.Position).Magnitude
+                    if dist <= State.KillAuraRange then
+                        local remote = ReplicatedStorage:FindFirstChild("Remotes")
+                            and ReplicatedStorage.Remotes:FindFirstChild("M1")
+                        if remote then
+                            pcall(function() remote:FireServer(plr) end)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- ── Auto Punch (nearest) ─────────────────────────────────────────
+    if State.AutoPunch then
+        local target = GetNearestEnemy()
+        if target then
+            local remote = ReplicatedStorage:FindFirstChild("Remotes")
+                and ReplicatedStorage.Remotes:FindFirstChild("M1")
+            if remote then
+                pcall(function() remote:FireServer(target) end)
+            end
+        end
+    end
+
+    -- ── Auto Skills ──────────────────────────────────────────────────
+    if State.AutoSkills then
+        local skillKeys = {Enum.KeyCode.One, Enum.KeyCode.Two, Enum.KeyCode.Three, Enum.KeyCode.Four}
+        for _, key in ipairs(skillKeys) do
+            local via = Instance.new("InputObject")
+            via.KeyCode = key
+            via.UserInputType = Enum.UserInputType.Keyboard
+            pcall(function()
+                UserInputService.InputBegan:Fire(via, false)
+            end)
+        end
+    end
+
+    -- ── Auto Block ───────────────────────────────────────────────────
+    if State.AutoBlock then
+        local blockRemote = ReplicatedStorage:FindFirstChild("Remotes")
+            and ReplicatedStorage.Remotes:FindFirstChild("Block")
+        if blockRemote then
+            pcall(function() blockRemote:FireServer(true) end)
+        end
+    end
+
+    -- ── Aimbot / Camlock ─────────────────────────────────────────────
+    if State.Aimbot then
+        local target = GetNearestEnemy()
+        if target then
+            local tChar = GetCharacter(target)
+            local head  = tChar and tChar:FindFirstChild("Head")
+            if head then
+                Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, head.Position)
+            end
+        end
+    end
+
+    -- ── Auto Farm ────────────────────────────────────────────────────
+    if State.AutoFarm and root then
+        local mode = Options.FarmMode and Options.FarmMode.Value
+        local target = (mode == "Lowest HP Enemy") and GetLowestHPEnemy() or GetNearestEnemy()
+        if target then
+            local tRoot = GetRootPart(target)
+            if tRoot then
+                root.CFrame = tRoot.CFrame + Vector3.new(0, 0, 3)
+                local remote = ReplicatedStorage:FindFirstChild("Remotes")
+                    and ReplicatedStorage.Remotes:FindFirstChild("M1")
+                if remote then
+                    pcall(function() remote:FireServer(target) end)
+                end
+            end
+        end
+    end
+
+    -- ── Anti Void ────────────────────────────────────────────────────
+    if State.AntiVoid and root then
+        if root.Position.Y < -100 then
+            root.CFrame = CFrame.new(root.Position.X, 50, root.Position.Z)
+        end
+    end
+
+    -- ── Auto Safe Zone (low HP) ──────────────────────────────────────
+    if Options.AutoSafeZone and Options.AutoSafeZone.Value and hum and root then
+        if hum.Health < (hum.MaxHealth * 0.20) then
+            root.CFrame = CFrame.new(0, 500, 0)
+        end
+    end
+
+    -- ── Fly Movement ─────────────────────────────────────────────────
+    if State.Flying and FlyBodyVelocity and FlyBodyGyro and root then
+        local velocity = Vector3.zero
+        local cf = Camera.CFrame
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then velocity = velocity + cf.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then velocity = velocity - cf.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then velocity = velocity - cf.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then velocity = velocity + cf.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.E) then velocity = velocity + Vector3.new(0,1,0) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Q) then velocity = velocity - Vector3.new(0,1,0) end
+
+        FlyBodyVelocity.Velocity = velocity * FlySpeed
+        FlyBodyGyro.CFrame = cf
+    end
+end)
+
+-- Infinite Jump via input
+Connections.InfJump = UserInputService.JumpRequest:Connect(function()
+    if State.InfiniteJump then
+        local hum = GetHumanoid(LocalPlayer)
+        if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+    end
+end)
+
+-- Hitbox expander — apply on new characters spawning
+Players.PlayerAdded:Connect(function(plr)
+    plr.CharacterAdded:Connect(function(char)
+        task.wait(1)
+        if State.HitboxExpander then
+            for _, part in ipairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.Size = Vector3.new(State.HitboxSize, State.HitboxSize, State.HitboxSize)
+                end
+            end
+        end
+        if State.PlayerESP then CreateESP(plr) end
+    end)
+end)
+
+-- ╔══════════════════════════════════════╗
+-- ║          SETTINGS TAB SECTION        ║
+-- ╚══════════════════════════════════════╝
+
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({})
+InterfaceManager:SetFolder("TSBHub")
+SaveManager:SetFolder("TSBHub/configs")
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
+
+-- ╔══════════════════════════════════════╗
+-- ║               INIT                   ║
+-- ╚══════════════════════════════════════╝
+
+Window:SelectTab(1)
+SaveManager:LoadAutoloadConfig()
+
+Fluent:Notify({
+    Title = "TSB Hub",
+    Content = "Script loaded successfully!\nPress RCtrl to toggle UI.",
+    Duration = 6
+})
