@@ -586,8 +586,8 @@ end)
 local SliderFarmDistance = Tabs.Farm:AddSlider("FarmDistance", {
     Title = "Farm Distance",
     Description = "Distance for auto farm teleport (0-10)",
-    Default = 3,
-    Min = 0,
+    Default = 0,
+    Min = -10,
     Max = 10,
     Rounding = 0,
     Callback = function(Value)
