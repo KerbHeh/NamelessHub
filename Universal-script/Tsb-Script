@@ -1,76 +1,63 @@
--- TSB (The Strongest Battlegrounds) Exploit
 -- UI: Fluent Library by dawid-scripts
-
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
-
 -- ╔══════════════════════════════════════╗
--- ║         SERVICES & VARIABLES         ║
+-- ║ SERVICES & VARIABLES ║
 -- ╚══════════════════════════════════════╝
-
-local Players         = game:GetService("Players")
-local RunService      = game:GetService("RunService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local TweenService    = game:GetService("TweenService")
-local Workspace       = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local StarterGui      = game:GetService("StarterGui")
-local HttpService     = game:GetService("HttpService")
-
-local LocalPlayer     = Players.LocalPlayer
-local Camera          = Workspace.CurrentCamera
-local Mouse           = LocalPlayer:GetMouse()
-
-local Options         = Fluent.Options
-local Connections     = {}
-local ESPObjects      = {}
-
+local StarterGui = game:GetService("StarterGui")
+local HttpService = game:GetService("HttpService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+local Mouse = LocalPlayer:GetMouse()
+local Options = Fluent.Options
+local Connections = {}
+local ESPObjects = {}
 -- ╔══════════════════════════════════════╗
--- ║           STATE VARIABLES            ║
+-- ║ STATE VARIABLES ║
 -- ╚══════════════════════════════════════╝
-
 local State = {
     -- Combat
-    AutoBlock       = false,
-    AutoPunch       = false,
-    AutoSkills      = false,
-    KillAura        = false,
-    KillAuraRange   = 20,
-    HitboxExpander  = false,
-    HitboxSize      = 10,
-    Aimbot          = false,
-    AimbotTarget    = nil,
-
+    AutoBlock = false,
+    AutoPunch = false,
+    AutoSkills = false,
+    KillAura = false,
+    KillAuraRange = 20,
+    HitboxExpander = false,
+    HitboxSize = 10,
+    Aimbot = false,
+    AimbotTarget = nil,
     -- Player
     InfiniteStamina = false,
-    NoDashCooldown  = false,
-    WalkSpeed       = 16,
-    JumpPower       = 50,
-    Flying          = false,
-    Noclip          = false,
-
+    NoDashCooldown = false,
+    WalkSpeed = 16,
+    JumpPower = 50,
+    Flying = false,
+    Noclip = false,
     -- Visuals
-    PlayerESP       = false,
-    HitboxESP       = false,
-    Fullbright      = false,
-
+    PlayerESP = false,
+    HitboxESP = false,
+    Fullbright = false,
     -- Farm
-    AutoFarm        = false,
-    KillAll         = false,
-
+    AutoFarm = false,
+    KillAll = false,
+    FarmDistance = 3,
     -- Misc
-    AntiRagdoll     = false,
-    InfiniteJump    = false,
-    UnlockEmotes    = false,
-    AntiVoid        = false,
-    Invisible       = false,
+    AntiRagdoll = false,
+    InfiniteJump = false,
+    UnlockEmotes = false,
+    AntiVoid = false,
+    Invisible = false,
 }
-
 -- ╔══════════════════════════════════════╗
--- ║             WINDOW SETUP             ║
+-- ║ WINDOW SETUP ║
 -- ╚══════════════════════════════════════╝
-
 local Window = Fluent:CreateWindow({
     Title = "TSB Hub",
     SubTitle = "The Strongest Battlegrounds",
@@ -80,45 +67,37 @@ local Window = Fluent:CreateWindow({
     Theme = "Dark",
     MinimizeKey = Enum.KeyCode.RightControl
 })
-
 local Tabs = {
-    Combat   = Window:AddTab({ Title = "Combat",   Icon = "sword"         }),
-    Player   = Window:AddTab({ Title = "Player",   Icon = "user"          }),
-    Visuals  = Window:AddTab({ Title = "Visuals",  Icon = "eye"           }),
-    Teleport = Window:AddTab({ Title = "Teleport", Icon = "map-pin"       }),
-    Farm     = Window:AddTab({ Title = "Farm",     Icon = "bot"           }),
-    Misc     = Window:AddTab({ Title = "Misc",     Icon = "wrench"        }),
-    Settings = Window:AddTab({ Title = "Settings", Icon = "settings"      }),
+    Combat = Window:AddTab({ Title = "Combat", Icon = "sword" }),
+    Player = Window:AddTab({ Title = "Player", Icon = "user" }),
+    Visuals = Window:AddTab({ Title = "Visuals", Icon = "eye" }),
+    Teleport = Window:AddTab({ Title = "Teleport", Icon = "map-pin" }),
+    Farm = Window:AddTab({ Title = "Farm", Icon = "bot" }),
+    Misc = Window:AddTab({ Title = "Misc", Icon = "wrench" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" }),
 }
-
 -- ╔══════════════════════════════════════╗
--- ║            HELPER FUNCTIONS          ║
+-- ║ HELPER FUNCTIONS ║
 -- ╚══════════════════════════════════════╝
-
 local function GetCharacter(player)
     return player and player.Character
 end
-
 local function GetRootPart(player)
     local char = GetCharacter(player)
     return char and char:FindFirstChild("HumanoidRootPart")
 end
-
 local function GetHumanoid(player)
     local char = GetCharacter(player)
     return char and char:FindFirstChildOfClass("Humanoid")
 end
-
 local function IsAlive(player)
     local hum = GetHumanoid(player)
     return hum and hum.Health > 0
 end
-
 local function GetNearestEnemy()
     local nearest, shortestDist = nil, math.huge
     local myRoot = GetRootPart(LocalPlayer)
     if not myRoot then return nil end
-
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= LocalPlayer and IsAlive(plr) then
             local root = GetRootPart(plr)
@@ -133,7 +112,6 @@ local function GetNearestEnemy()
     end
     return nearest
 end
-
 local function GetLowestHPEnemy()
     local target, lowestHP = nil, math.huge
     for _, plr in ipairs(Players:GetPlayers()) do
@@ -147,20 +125,16 @@ local function GetLowestHPEnemy()
     end
     return target
 end
-
 local function Notify(title, content, duration)
     Fluent:Notify({ Title = title, Content = content, Duration = duration or 4 })
 end
-
 -- ╔══════════════════════════════════════╗
--- ║          COMBAT TAB SECTION          ║
+-- ║ COMBAT TAB SECTION ║
 -- ╚══════════════════════════════════════╝
-
 Tabs.Combat:AddParagraph({
     Title = "Combat Features",
     Content = "Automated combat tools. Use responsibly."
 })
-
 -- Auto Block
 local ToggleAutoBlock = Tabs.Combat:AddToggle("AutoBlock", {
     Title = "Auto Block",
@@ -171,7 +145,6 @@ ToggleAutoBlock:OnChanged(function()
     State.AutoBlock = Options.AutoBlock.Value
     if State.AutoBlock then Notify("Combat", "Auto Block Enabled") end
 end)
-
 -- Auto Punch / M1
 local ToggleAutoPunch = Tabs.Combat:AddToggle("AutoPunch", {
     Title = "Auto Punch / M1",
@@ -182,7 +155,6 @@ ToggleAutoPunch:OnChanged(function()
     State.AutoPunch = Options.AutoPunch.Value
     if State.AutoPunch then Notify("Combat", "Auto Punch Enabled") end
 end)
-
 -- Auto Skills
 local ToggleAutoSkills = Tabs.Combat:AddToggle("AutoSkills", {
     Title = "Auto Skills (1,2,3,4)",
@@ -193,7 +165,6 @@ ToggleAutoSkills:OnChanged(function()
     State.AutoSkills = Options.AutoSkills.Value
     if State.AutoSkills then Notify("Combat", "Auto Skills Enabled") end
 end)
-
 -- Kill Aura
 local ToggleKillAura = Tabs.Combat:AddToggle("KillAura", {
     Title = "Kill Aura",
@@ -204,7 +175,6 @@ ToggleKillAura:OnChanged(function()
     State.KillAura = Options.KillAura.Value
     if State.KillAura then Notify("Combat", "Kill Aura Enabled") end
 end)
-
 -- Kill Aura Range Slider
 local SliderKillAuraRange = Tabs.Combat:AddSlider("KillAuraRange", {
     Title = "Kill Aura Range",
@@ -217,7 +187,6 @@ local SliderKillAuraRange = Tabs.Combat:AddSlider("KillAuraRange", {
         State.KillAuraRange = Value
     end
 })
-
 -- Hitbox Expander
 local ToggleHitbox = Tabs.Combat:AddToggle("HitboxExpander", {
     Title = "Hitbox Expander",
@@ -226,7 +195,6 @@ local ToggleHitbox = Tabs.Combat:AddToggle("HitboxExpander", {
 })
 ToggleHitbox:OnChanged(function()
     State.HitboxExpander = Options.HitboxExpander.Value
-
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= LocalPlayer then
             local char = GetCharacter(plr)
@@ -245,7 +213,6 @@ ToggleHitbox:OnChanged(function()
         end
     end
 end)
-
 -- Hitbox Size Slider
 local SliderHitboxSize = Tabs.Combat:AddSlider("HitboxSize", {
     Title = "Hitbox Size",
@@ -258,7 +225,6 @@ local SliderHitboxSize = Tabs.Combat:AddSlider("HitboxSize", {
         State.HitboxSize = Value
     end
 })
-
 -- Aimbot / Camlock
 local ToggleAimbot = Tabs.Combat:AddToggle("Aimbot", {
     Title = "Aimbot / Camlock",
@@ -269,16 +235,13 @@ ToggleAimbot:OnChanged(function()
     State.Aimbot = Options.Aimbot.Value
     if State.Aimbot then Notify("Combat", "Camlock Enabled") end
 end)
-
 -- ╔══════════════════════════════════════╗
--- ║          PLAYER TAB SECTION          ║
+-- ║ PLAYER TAB SECTION ║
 -- ╚══════════════════════════════════════╝
-
 Tabs.Player:AddParagraph({
     Title = "Player Features",
     Content = "Modify your character's attributes and movement."
 })
-
 -- Infinite Stamina
 local ToggleInfStamina = Tabs.Player:AddToggle("InfiniteStamina", {
     Title = "Infinite Stamina / No Fatigue",
@@ -288,7 +251,6 @@ local ToggleInfStamina = Tabs.Player:AddToggle("InfiniteStamina", {
 ToggleInfStamina:OnChanged(function()
     State.InfiniteStamina = Options.InfiniteStamina.Value
 end)
-
 -- No Dash Cooldown
 local ToggleNoDash = Tabs.Player:AddToggle("NoDashCooldown", {
     Title = "No Dash Cooldown",
@@ -298,7 +260,6 @@ local ToggleNoDash = Tabs.Player:AddToggle("NoDashCooldown", {
 ToggleNoDash:OnChanged(function()
     State.NoDashCooldown = Options.NoDashCooldown.Value
 end)
-
 -- WalkSpeed Slider
 local SliderWalkSpeed = Tabs.Player:AddSlider("WalkSpeed", {
     Title = "WalkSpeed",
@@ -313,7 +274,6 @@ local SliderWalkSpeed = Tabs.Player:AddSlider("WalkSpeed", {
         if hum then hum.WalkSpeed = Value end
     end
 })
-
 -- JumpPower Slider
 local SliderJumpPower = Tabs.Player:AddSlider("JumpPower", {
     Title = "JumpPower",
@@ -331,43 +291,36 @@ local SliderJumpPower = Tabs.Player:AddSlider("JumpPower", {
         end
     end
 })
-
 -- Fly
 local ToggleFly = Tabs.Player:AddToggle("Fly", {
     Title = "Fly",
     Description = "Lets you fly freely around the map",
     Default = false
 })
-
 local FlyBodyVelocity, FlyBodyGyro
 local FlySpeed = 80
-
 ToggleFly:OnChanged(function()
     State.Flying = Options.Fly.Value
     local char = GetCharacter(LocalPlayer)
     local root = GetRootPart(LocalPlayer)
-    local hum  = GetHumanoid(LocalPlayer)
-
+    local hum = GetHumanoid(LocalPlayer)
     if State.Flying then
         if not char or not root then return end
         FlyBodyGyro = Instance.new("BodyGyro", root)
         FlyBodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
         FlyBodyGyro.CFrame = root.CFrame
-
         FlyBodyVelocity = Instance.new("BodyVelocity", root)
         FlyBodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
         FlyBodyVelocity.Velocity = Vector3.zero
-
         if hum then hum.PlatformStand = true end
         Notify("Player", "Fly Enabled — WASD + E/Q to move vertically")
     else
-        if FlyBodyGyro    then FlyBodyGyro:Destroy()    FlyBodyGyro    = nil end
+        if FlyBodyGyro then FlyBodyGyro:Destroy() FlyBodyGyro = nil end
         if FlyBodyVelocity then FlyBodyVelocity:Destroy() FlyBodyVelocity = nil end
         local hum2 = GetHumanoid(LocalPlayer)
         if hum2 then hum2.PlatformStand = false end
     end
 end)
-
 -- Noclip
 local ToggleNoclip = Tabs.Player:AddToggle("Noclip", {
     Title = "Noclip",
@@ -378,22 +331,18 @@ ToggleNoclip:OnChanged(function()
     State.Noclip = Options.Noclip.Value
     if State.Noclip then Notify("Player", "Noclip Enabled") end
 end)
-
 -- ╔══════════════════════════════════════╗
--- ║         VISUALS TAB SECTION          ║
+-- ║ VISUALS TAB SECTION ║
 -- ╚══════════════════════════════════════╝
-
 Tabs.Visuals:AddParagraph({
     Title = "Visual Features",
     Content = "ESP, highlighting, and environment tweaks."
 })
-
 -- Helper: Create ESP for a player
 local function CreateESP(plr)
     if ESPObjects[plr] then return end
     local char = GetCharacter(plr)
     if not char then return end
-
     local highlight = Instance.new("Highlight")
     highlight.FillColor = Color3.fromRGB(255, 60, 60)
     highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
@@ -401,7 +350,6 @@ local function CreateESP(plr)
     highlight.OutlineTransparency = 0
     highlight.Adornee = char
     highlight.Parent = char
-
     -- BillboardGui name tag
     local root = char:FindFirstChild("HumanoidRootPart")
     local billboard
@@ -412,7 +360,6 @@ local function CreateESP(plr)
         billboard.AlwaysOnTop = true
         billboard.Adornee = root
         billboard.Parent = root
-
         local label = Instance.new("TextLabel", billboard)
         label.Size = UDim2.new(1, 0, 1, 0)
         label.BackgroundTransparency = 1
@@ -421,7 +368,6 @@ local function CreateESP(plr)
         label.Font = Enum.Font.GothamBold
         label.TextScaled = true
         label.Text = plr.Name
-
         -- Update health in label
         local hum = char:FindFirstChildOfClass("Humanoid")
         if hum then
@@ -431,10 +377,8 @@ local function CreateESP(plr)
             label.Text = plr.Name .. "\n❤ " .. math.floor(hum.Health)
         end
     end
-
     ESPObjects[plr] = { Highlight = highlight, Billboard = billboard }
 end
-
 local function RemoveESP(plr)
     if ESPObjects[plr] then
         if ESPObjects[plr].Highlight then ESPObjects[plr].Highlight:Destroy() end
@@ -442,7 +386,6 @@ local function RemoveESP(plr)
         ESPObjects[plr] = nil
     end
 end
-
 -- Player ESP Toggle
 local ToggleESP = Tabs.Visuals:AddToggle("PlayerESP", {
     Title = "Player ESP",
@@ -462,21 +405,17 @@ ToggleESP:OnChanged(function()
         end
     end
 end)
-
 Players.PlayerAdded:Connect(function(plr)
     plr.CharacterAdded:Connect(function()
         task.wait(1)
         if State.PlayerESP then CreateESP(plr) end
     end)
 end)
-
 Players.PlayerRemoving:Connect(function(plr)
     RemoveESP(plr)
 end)
-
 -- Hitbox ESP / Tracers (uses SelectionBox per enemy)
 local HitboxBoxes = {}
-
 local ToggleHitboxESP = Tabs.Visuals:AddToggle("HitboxESP", {
     Title = "Hitbox ESP / Tracers",
     Description = "Draws selection boxes around enemy hitboxes",
@@ -507,7 +446,6 @@ ToggleHitboxESP:OnChanged(function()
         end
     end
 end)
-
 -- Fullbright / No Fog
 local ToggleFullbright = Tabs.Visuals:AddToggle("Fullbright", {
     Title = "Fullbright / No Fog",
@@ -534,16 +472,13 @@ ToggleFullbright:OnChanged(function()
         Lighting.Ambient = Color3.fromRGB(70, 70, 70)
     end
 end)
-
 -- ╔══════════════════════════════════════╗
--- ║        TELEPORT TAB SECTION          ║
+-- ║ TELEPORT TAB SECTION ║
 -- ╚══════════════════════════════════════╝
-
 Tabs.Teleport:AddParagraph({
     Title = "Teleport Features",
     Content = "Instantly travel to any location or player."
 })
-
 -- TP to Spawn
 Tabs.Teleport:AddButton({
     Title = "TP to Spawn",
@@ -564,7 +499,6 @@ Tabs.Teleport:AddButton({
         end
     end
 })
-
 -- TP to Safe Zone (manual trigger)
 Tabs.Teleport:AddButton({
     Title = "TP Safe Zone",
@@ -577,13 +511,11 @@ Tabs.Teleport:AddButton({
         end
     end
 })
-
 local ToggleAutoSafeZone = Tabs.Teleport:AddToggle("AutoSafeZone", {
     Title = "Auto TP Safe Zone (low HP)",
     Description = "Automatically teleports you to safety when HP drops below 20%",
     Default = false
 })
-
 -- TP to Player
 local function GetPlayerNames()
     local names = {}
@@ -594,7 +526,6 @@ local function GetPlayerNames()
     end
     return #names > 0 and names or {"(No Players)"}
 end
-
 local DropdownTPPlayer = Tabs.Teleport:AddDropdown("TPToPlayer", {
     Title = "Teleport to Player",
     Description = "Select a player and press Teleport",
@@ -602,7 +533,6 @@ local DropdownTPPlayer = Tabs.Teleport:AddDropdown("TPToPlayer", {
     Multi = false,
     Default = 1,
 })
-
 Tabs.Teleport:AddButton({
     Title = "Teleport to Selected Player",
     Description = "Teleports to the player selected above",
@@ -613,8 +543,8 @@ Tabs.Teleport:AddButton({
             return
         end
         local target = Players:FindFirstChild(targetName)
-        local root   = GetRootPart(LocalPlayer)
-        local tRoot  = target and GetRootPart(target)
+        local root = GetRootPart(LocalPlayer)
+        local tRoot = target and GetRootPart(target)
         if root and tRoot then
             root.CFrame = tRoot.CFrame + Vector3.new(0, 3, 5)
             Notify("Teleport", "Teleported to " .. targetName)
@@ -623,7 +553,6 @@ Tabs.Teleport:AddButton({
         end
     end
 })
-
 Tabs.Teleport:AddButton({
     Title = "Refresh Player List",
     Description = "Updates the dropdown with current players",
@@ -632,23 +561,19 @@ Tabs.Teleport:AddButton({
         Notify("Teleport", "Player list refreshed")
     end
 })
-
 -- ╔══════════════════════════════════════╗
--- ║          FARM TAB SECTION            ║
+-- ║ FARM TAB SECTION ║
 -- ╚══════════════════════════════════════╝
-
 Tabs.Farm:AddParagraph({
     Title = "Farm Features",
     Content = "Automated grinding and server management."
 })
-
 local DropdownFarmMode = Tabs.Farm:AddDropdown("FarmMode", {
     Title = "Auto Farm Target Mode",
     Values = {"Nearest Enemy", "Lowest HP Enemy"},
     Multi = false,
     Default = 1,
 })
-
 local ToggleAutoFarm = Tabs.Farm:AddToggle("AutoFarm", {
     Title = "Auto Farm Kills",
     Description = "Automatically hunts and kills enemies",
@@ -658,7 +583,17 @@ ToggleAutoFarm:OnChanged(function()
     State.AutoFarm = Options.AutoFarm.Value
     if State.AutoFarm then Notify("Farm", "Auto Farm Started") end
 end)
-
+local SliderFarmDistance = Tabs.Farm:AddSlider("FarmDistance", {
+    Title = "Farm Distance",
+    Description = "Distance for auto farm teleport (0-10)",
+    Default = 3,
+    Min = 0,
+    Max = 10,
+    Rounding = 0,
+    Callback = function(Value)
+        State.FarmDistance = Value
+    end
+})
 Tabs.Farm:AddButton({
     Title = "Kill All",
     Description = "Teleports to and kills every player on the server",
@@ -685,7 +620,6 @@ Tabs.Farm:AddButton({
         Notify("Farm", "Kill All executed")
     end
 })
-
 Tabs.Farm:AddButton({
     Title = "Server Hop / Auto Rejoin",
     Description = "Joins a new server immediately",
@@ -699,16 +633,13 @@ Tabs.Farm:AddButton({
         end)
     end
 })
-
 -- ╔══════════════════════════════════════╗
--- ║          MISC TAB SECTION            ║
+-- ║ MISC TAB SECTION ║
 -- ╚══════════════════════════════════════╝
-
 Tabs.Misc:AddParagraph({
     Title = "Miscellaneous",
     Content = "Extra utilities and bypass features."
 })
-
 -- Anti Ragdoll / Godmode
 local ToggleGodmode = Tabs.Misc:AddToggle("AntiRagdoll", {
     Title = "Anti Ragdoll / Godmode",
@@ -727,7 +658,6 @@ ToggleGodmode:OnChanged(function()
     end
     if State.AntiRagdoll then Notify("Misc", "Anti Ragdoll Enabled") end
 end)
-
 -- Infinite Jump
 local ToggleInfJump = Tabs.Misc:AddToggle("InfiniteJump", {
     Title = "Infinite Jump",
@@ -737,7 +667,6 @@ local ToggleInfJump = Tabs.Misc:AddToggle("InfiniteJump", {
 ToggleInfJump:OnChanged(function()
     State.InfiniteJump = Options.InfiniteJump.Value
 end)
-
 -- Unlock Emotes / Movesets
 Tabs.Misc:AddButton({
     Title = "Unlock Emotes / Movesets",
@@ -755,7 +684,6 @@ Tabs.Misc:AddButton({
         end
     end
 })
-
 -- Anti Void / Auto Dodge
 local ToggleAntiVoid = Tabs.Misc:AddToggle("AntiVoid", {
     Title = "Anti Void / Auto Dodge",
@@ -766,7 +694,6 @@ ToggleAntiVoid:OnChanged(function()
     State.AntiVoid = Options.AntiVoid.Value
     if State.AntiVoid then Notify("Misc", "Anti Void Enabled") end
 end)
-
 -- FE Invisibility
 local ToggleInvisible = Tabs.Misc:AddToggle("Invisible", {
     Title = "FE Invisibility (Full Body)",
@@ -777,7 +704,6 @@ ToggleInvisible:OnChanged(function()
     State.Invisible = Options.Invisible.Value
     local char = GetCharacter(LocalPlayer)
     if not char then return end
-
     if State.Invisible then
         -- FE invisible method: move character root to far location momentarily
         -- then respawn parts locally transparent
@@ -806,16 +732,13 @@ ToggleInvisible:OnChanged(function()
         Notify("Misc", "FE Invisibility Disabled")
     end
 end)
-
 -- ╔══════════════════════════════════════╗
--- ║          RUNTIME LOOP (heartbeat)    ║
+-- ║ RUNTIME LOOP (heartbeat) ║
 -- ╚══════════════════════════════════════╝
-
 Connections.Heartbeat = RunService.Heartbeat:Connect(function(dt)
-    local char  = GetCharacter(LocalPlayer)
-    local root  = GetRootPart(LocalPlayer)
-    local hum   = GetHumanoid(LocalPlayer)
-
+    local char = GetCharacter(LocalPlayer)
+    local root = GetRootPart(LocalPlayer)
+    local hum = GetHumanoid(LocalPlayer)
     -- ── Noclip ──────────────────────────────────────────────────────
     if State.Noclip and char then
         for _, part in ipairs(char:GetDescendants()) do
@@ -824,7 +747,6 @@ Connections.Heartbeat = RunService.Heartbeat:Connect(function(dt)
             end
         end
     end
-
     -- ── Infinite Stamina ─────────────────────────────────────────────
     if State.InfiniteStamina and char then
         -- TSB typically uses a "Stamina" or "Endurance" NumberValue
@@ -834,7 +756,6 @@ Connections.Heartbeat = RunService.Heartbeat:Connect(function(dt)
             stamina.Value = stamina.MaxValue or 100
         end
     end
-
     -- ── WalkSpeed / JumpPower lock ───────────────────────────────────
     if hum then
         if Options.WalkSpeed and hum.WalkSpeed ~= State.WalkSpeed then
@@ -845,7 +766,6 @@ Connections.Heartbeat = RunService.Heartbeat:Connect(function(dt)
             hum.JumpPower = State.JumpPower
         end
     end
-
     -- ── Kill Aura ────────────────────────────────────────────────────
     if State.KillAura and root then
         for _, plr in ipairs(Players:GetPlayers()) do
@@ -864,7 +784,6 @@ Connections.Heartbeat = RunService.Heartbeat:Connect(function(dt)
             end
         end
     end
-
     -- ── Auto Punch (nearest) ─────────────────────────────────────────
     if State.AutoPunch then
         local target = GetNearestEnemy()
@@ -876,7 +795,6 @@ Connections.Heartbeat = RunService.Heartbeat:Connect(function(dt)
             end
         end
     end
-
     -- ── Auto Skills ──────────────────────────────────────────────────
     if State.AutoSkills then
         local skillKeys = {Enum.KeyCode.One, Enum.KeyCode.Two, Enum.KeyCode.Three, Enum.KeyCode.Four}
@@ -889,7 +807,6 @@ Connections.Heartbeat = RunService.Heartbeat:Connect(function(dt)
             end)
         end
     end
-
     -- ── Auto Block ───────────────────────────────────────────────────
     if State.AutoBlock then
         local blockRemote = ReplicatedStorage:FindFirstChild("Remotes")
@@ -898,19 +815,17 @@ Connections.Heartbeat = RunService.Heartbeat:Connect(function(dt)
             pcall(function() blockRemote:FireServer(true) end)
         end
     end
-
     -- ── Aimbot / Camlock ─────────────────────────────────────────────
     if State.Aimbot then
         local target = GetNearestEnemy()
         if target then
             local tChar = GetCharacter(target)
-            local head  = tChar and tChar:FindFirstChild("Head")
+            local head = tChar and tChar:FindFirstChild("Head")
             if head then
                 Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, head.Position)
             end
         end
     end
-
     -- ── Auto Farm ────────────────────────────────────────────────────
     if State.AutoFarm and root then
         local mode = Options.FarmMode and Options.FarmMode.Value
@@ -918,7 +833,7 @@ Connections.Heartbeat = RunService.Heartbeat:Connect(function(dt)
         if target then
             local tRoot = GetRootPart(target)
             if tRoot then
-                root.CFrame = tRoot.CFrame + Vector3.new(0, 0, 3)
+                root.CFrame = tRoot.CFrame + Vector3.new(0, 0, State.FarmDistance)
                 local remote = ReplicatedStorage:FindFirstChild("Remotes")
                     and ReplicatedStorage.Remotes:FindFirstChild("M1")
                 if remote then
@@ -927,21 +842,18 @@ Connections.Heartbeat = RunService.Heartbeat:Connect(function(dt)
             end
         end
     end
-
     -- ── Anti Void ────────────────────────────────────────────────────
     if State.AntiVoid and root then
         if root.Position.Y < -100 then
             root.CFrame = CFrame.new(root.Position.X, 50, root.Position.Z)
         end
     end
-
     -- ── Auto Safe Zone (low HP) ──────────────────────────────────────
     if Options.AutoSafeZone and Options.AutoSafeZone.Value and hum and root then
         if hum.Health < (hum.MaxHealth * 0.20) then
             root.CFrame = CFrame.new(0, 500, 0)
         end
     end
-
     -- ── Fly Movement ─────────────────────────────────────────────────
     if State.Flying and FlyBodyVelocity and FlyBodyGyro and root then
         local velocity = Vector3.zero
@@ -952,12 +864,10 @@ Connections.Heartbeat = RunService.Heartbeat:Connect(function(dt)
         if UserInputService:IsKeyDown(Enum.KeyCode.D) then velocity = velocity + cf.RightVector end
         if UserInputService:IsKeyDown(Enum.KeyCode.E) then velocity = velocity + Vector3.new(0,1,0) end
         if UserInputService:IsKeyDown(Enum.KeyCode.Q) then velocity = velocity - Vector3.new(0,1,0) end
-
         FlyBodyVelocity.Velocity = velocity * FlySpeed
         FlyBodyGyro.CFrame = cf
     end
 end)
-
 -- Infinite Jump via input
 Connections.InfJump = UserInputService.JumpRequest:Connect(function()
     if State.InfiniteJump then
@@ -965,7 +875,6 @@ Connections.InfJump = UserInputService.JumpRequest:Connect(function()
         if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
     end
 end)
-
 -- Hitbox expander — apply on new characters spawning
 Players.PlayerAdded:Connect(function(plr)
     plr.CharacterAdded:Connect(function(char)
@@ -980,11 +889,9 @@ Players.PlayerAdded:Connect(function(plr)
         if State.PlayerESP then CreateESP(plr) end
     end)
 end)
-
 -- ╔══════════════════════════════════════╗
--- ║          SETTINGS TAB SECTION        ║
+-- ║ SETTINGS TAB SECTION ║
 -- ╚══════════════════════════════════════╝
-
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
 SaveManager:IgnoreThemeSettings()
@@ -993,14 +900,11 @@ InterfaceManager:SetFolder("TSBHub")
 SaveManager:SetFolder("TSBHub/configs")
 InterfaceManager:BuildInterfaceSection(Tabs.Settings)
 SaveManager:BuildConfigSection(Tabs.Settings)
-
 -- ╔══════════════════════════════════════╗
--- ║               INIT                   ║
+-- ║ INIT ║
 -- ╚══════════════════════════════════════╝
-
 Window:SelectTab(1)
 SaveManager:LoadAutoloadConfig()
-
 Fluent:Notify({
     Title = "TSB Hub",
     Content = "Script loaded successfully!\nPress RCtrl to toggle UI.",
