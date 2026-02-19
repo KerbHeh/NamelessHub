@@ -1,0 +1,133 @@
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+local Window = Fluent:CreateWindow({
+    Title = "FISH IT! ULTRA HUB",
+    SubTitle = "By NamelessHub",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 460),
+    Acrylic = true,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+local Options = Fluent.Options
+local lp = game.Players.LocalPlayer
+local char = lp.Character or lp.CharacterAdded:Wait()
+
+-- // ANTI-AFK (Evita ser kickado por inatividade)
+local VirtualUser = game:GetService("VirtualUser")
+lp.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+end)
+
+-- // FUNÇÕES DE LÓGICA (BACKEND)
+local function GetInventory()
+    -- Tenta achar a pasta de peixes (Geralmente no Player ou no Backpack)
+    -- Se o jogo for bem feito, estará em lp.Backpack ou lp.PlayerData.Inventory
+    return lp:FindFirstChild("Backpack") or lp:FindFirstChild("PlayerGui") 
+end
+
+-- // ABAS
+local Tabs = {
+    Main = Window:AddTab({ Title = "Auto Farm", Icon = "fish" }),
+    Movement = Window:AddTab({ Title = "Movement", Icon = "zap" }),
+    Teleport = Window:AddTab({ Title = "Teleports", Icon = "map" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+}
+
+-- ===============================================================
+-- ABA: AUTO FARM
+-- ===============================================================
+Tabs.Main:AddSection("Fishing Automation")
+
+local AutoFish = Tabs.Main:AddToggle("AutoFish", {Title = "Auto Pesca Infinita", Default = false})
+AutoFish:OnChanged(function()
+    task.spawn(function()
+        while Options.AutoFish.Value do
+            -- 1. Lógica de Pescar (Use o SimpleSpy aqui)
+            -- Exemplo: game.ReplicatedStorage.Remotes.Fish:FireServer()
+            print("Lançando isca...")
+            
+            task.wait(2) -- Tempo de animação (Ajuste conforme o jogo)
+            
+            -- 2. Lógica de Puxar (Se o jogo tiver minigame, você precisa do remote que completa o minigame)
+            -- Exemplo: game.ReplicatedStorage.Remotes.CompleteMinigame:FireServer(true)
+        end
+    end)
+end)
+
+local AutoSell = Tabs.Main:AddToggle("AutoSell", {Title = "Auto Venda (Loop)", Default = false})
+AutoSell:OnChanged(function()
+    task.spawn(function()
+        while Options.AutoSell.Value do
+            -- 3. Lógica de Vender (Use o SimpleSpy no botão de Sell do jogo)
+            -- Exemplo: game.ReplicatedStorage.Remotes.SellAll:FireServer()
+            print("Vendendo peixes...")
+            task.wait(5) -- Vende a cada 5 segundos para não dar lag
+        end
+    end)
+end)
+
+-- ===============================================================
+-- ABA: MOVIMENTAÇÃO
+-- ===============================================================
+Tabs.Movement:AddSection("Player Stats")
+
+Tabs.Movement:AddSlider("WS", {
+    Title = "Velocidade (Speed)",
+    Min = 16, Max = 300, Default = 16, Rounding = 0,
+    Callback = function(v) 
+        if lp.Character and lp.Character:FindFirstChild("Humanoid") then
+            lp.Character.Humanoid.WalkSpeed = v 
+        end
+    end
+})
+
+Tabs.Movement:AddToggle("InfJump", {Title = "Pulo Infinito", Default = false})
+game:GetService("UserInputService").JumpRequest:Connect(function()
+    if Options.InfJump.Value and lp.Character then
+        lp.Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping")
+    end
+end)
+
+-- ===============================================================
+-- ABA: TELEPORTES
+-- ===============================================================
+Tabs.Teleport:AddSection("Locais Importantes")
+
+local function TP(cframe)
+    if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+        lp.Character.HumanoidRootPart.CFrame = cframe
+    end
+end
+
+Tabs.Teleport:AddButton({
+    Title = "Ir para o Vendedor",
+    Callback = function() 
+        TP(CFrame.new(120, 10, -50)) -- PEGUE A COORDENAÇÃO REAL NO JOGO
+    end
+})
+
+Tabs.Teleport:AddButton({
+    Title = "Spot de Peixes Míticos",
+    Callback = function() 
+        TP(CFrame.new(1000, 20, 1000)) -- PEGUE A COORDENAÇÃO REAL NO JOGO
+    end
+})
+
+-- ===============================================================
+-- FINALIZAÇÃO
+-- ===============================================================
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+SaveManager:IgnoreThemeSettings()
+InterfaceManager:SetFolder("FishItGemini")
+SaveManager:SetFolder("FishItGemini/configs")
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
+
+Window:SelectTab(1)
+Fluent:Notify({Title = "Sucesso", Content = "Script carregado com Anti-AFK!", Duration = 5})
