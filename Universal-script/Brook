@@ -1,25 +1,19 @@
 -- ╔══════════════════════════════════════════════════════════════╗
--- ║         BROOKHAVEN ADMIN HD  —  v5 FINAL REMODEL            ║
+-- ║         BROOKHAVEN ADMIN HD  —  v7                          ║
 -- ║   Movimento · Jogador · Brookhaven · Visual · Mundo · Misc  ║
--- ║                    100% FE Safe                             ║
 -- ╚══════════════════════════════════════════════════════════════╝
 
--- ┌─────────────────────────────────────────┐
--- │            CARREGAMENTO                 │
--- └─────────────────────────────────────────┘
 local function safeLoad(url, nome)
     local ok, res = pcall(function()
         return loadstring(game:HttpGet(url, true))()
     end)
-    if not ok then
-        error("[AdminHD] Falhou ao carregar " .. nome .. ": " .. tostring(res), 0)
-    end
+    if not ok then error("[AdminHD] Falhou: " .. nome .. "\n" .. tostring(res), 0) end
     return res
 end
 
-local Fluent           = safeLoad("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua",                                    "Fluent")
-local SaveManager      = safeLoad("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua",     "SaveManager")
-local InterfaceManager = safeLoad("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua","InterfaceManager")
+local Fluent           = safeLoad("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua", "Fluent")
+local SaveManager      = safeLoad("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua", "SaveManager")
+local InterfaceManager = safeLoad("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua", "InterfaceManager")
 
 -- ┌─────────────────────────────────────────┐
 -- │              SERVIÇOS                   │
@@ -27,7 +21,6 @@ local InterfaceManager = safeLoad("https://raw.githubusercontent.com/dawid-scrip
 local Players     = game:GetService("Players")
 local RunService  = game:GetService("RunService")
 local UserInput   = game:GetService("UserInputService")
-local TweenSvc    = game:GetService("TweenService")
 local Lighting    = game:GetService("Lighting")
 local VirtualUser = game:GetService("VirtualUser")
 local Debris      = game:GetService("Debris")
@@ -38,22 +31,22 @@ local LP          = Players.LocalPlayer
 -- └─────────────────────────────────────────┘
 local Window = Fluent:CreateWindow({
     Title       = "Brookhaven Admin HD",
-    SubTitle    = "v5 FINAL  ·  FE Safe",
+    SubTitle    = "v7  ·  FE Safe",
     TabWidth    = 168,
     Size        = UDim2.fromOffset(680, 540),
-    Acrylic     = false,  -- false = máxima compatibilidade
+    Acrylic     = false,
     Theme       = "Dark",
     MinimizeKey = Enum.KeyCode.RightControl,
 })
 
 local T = {
     Move = Window:AddTab({ Title = "Movimento",  Icon = "zap"      }),
-    Play = Window:AddTab({ Title = "Jogador",    Icon = "user"      }),
-    BK   = Window:AddTab({ Title = "Brookhaven", Icon = "car"       }),
-    Vis  = Window:AddTab({ Title = "Visual",     Icon = "eye"       }),
-    Wld  = Window:AddTab({ Title = "Mundo",      Icon = "globe"     }),
-    Mis  = Window:AddTab({ Title = "Misc",       Icon = "star"      }),
-    Cfg  = Window:AddTab({ Title = "Config",     Icon = "settings"  }),
+    Play = Window:AddTab({ Title = "Jogador",    Icon = "user"     }),
+    BK   = Window:AddTab({ Title = "Brookhaven", Icon = "car"      }),
+    Vis  = Window:AddTab({ Title = "Visual",     Icon = "eye"      }),
+    Wld  = Window:AddTab({ Title = "Mundo",      Icon = "globe"    }),
+    Mis  = Window:AddTab({ Title = "Misc",       Icon = "star"     }),
+    Cfg  = Window:AddTab({ Title = "Config",     Icon = "settings" }),
 }
 
 local Options = Fluent.Options
@@ -72,13 +65,13 @@ local function getChar()  return LP.Character end
 local function getRoot()  local c = getChar() return c and c:FindFirstChild("HumanoidRootPart") end
 local function getHum()   local c = getChar() return c and c:FindFirstChildOfClass("Humanoid") end
 local function getMouse() return LP:GetMouse() end
+local function getCam()   return workspace.CurrentCamera end
 
 local function notify(titulo, msg, dur)
     Fluent:Notify({ Title = titulo, Content = msg, Duration = dur or 4 })
 end
 
--- Escala correta via NumberValues (FE safe, não deforma)
-local SCALES = {"BodyHeightScale","BodyDepthScale","BodyWidthScale","HeadScale"}
+local SCALES = { "BodyHeightScale", "BodyDepthScale", "BodyWidthScale", "HeadScale" }
 local function applyScale(s)
     local h = getHum(); if not h then return end
     for _, n in ipairs(SCALES) do
@@ -86,7 +79,6 @@ local function applyScale(s)
     end
 end
 
--- Salva lighting original
 local ORIG = {
     Brightness    = Lighting.Brightness,
     ClockTime     = Lighting.ClockTime,
@@ -96,39 +88,51 @@ local ORIG = {
     Ambient       = Lighting.Ambient,
 }
 
--- Busca tool por nome parcial em qualquer lugar
 local function findTool(...)
-    local names = {...}
-    for _, n in ipairs(names) do
-        local found = LP.Backpack:FindFirstChild(n)
+    for _, n in ipairs({...}) do
+        local f = LP.Backpack:FindFirstChild(n)
             or (getChar() and getChar():FindFirstChild(n))
             or workspace:FindFirstChild(n, true)
-        if found then return found end
+        if f then return f end
     end
     return nil
 end
 
--- Busca VehicleSeat atual
+-- VehicleSeat atual (qualquer veículo no workspace que LP esteja usando)
 local function getVehicleSeat()
     local h = getHum(); if not h then return nil end
-    local seat = h.SeatPart
-    return (seat and seat:IsA("VehicleSeat")) and seat or nil
+    local s = h.SeatPart
+    return (s and s:IsA("VehicleSeat")) and s or nil
 end
 
--- Lista de jogadores (excluindo o próprio)
+-- Também procura VehicleSeat no workspace inteiro que esteja "vazio"
+-- para casos onde o Brookhaven usa scripts próprios
+local function findAnyVehicleSeat()
+    local seat = getVehicleSeat()
+    if seat then return seat end
+    -- Tenta achar pela distância (<=20 studs)
+    local root = getRoot(); if not root then return nil end
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("VehicleSeat") then
+            local dist = (obj.Position - root.Position).Magnitude
+            if dist <= 20 then return obj end
+        end
+    end
+    return nil
+end
+
 local function playerList()
     local t = {}
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= LP then table.insert(t, p.Name) end
     end
-    return #t > 0 and t or {"(nenhum)"}
+    return #t > 0 and t or { "(nenhum)" }
 end
 
--- Reaplicar tudo ao respawn
 LP.CharacterAdded:Connect(function()
     task.wait(1.5)
     local h = getHum(); if not h then return end
-    if Options.WalkSpeed then h.WalkSpeed = Options.WalkSpeed.Value end
+    if Options.WalkSpeed then h.WalkSpeed  = Options.WalkSpeed.Value end
     if Options.JumpPower then
         h.JumpPower  = Options.JumpPower.Value
         h.JumpHeight = Options.JumpPower.Value
@@ -171,9 +175,8 @@ T.Move:AddSlider("SizeScale", {
     Callback = function(v) applyScale(v) end,
 })
 
--- Sprint
 T.Move:AddToggle("Sprint", {
-    Title = "Sprint (Shift)", Description = "Shift = 2.5× a velocidade configurada",
+    Title = "Sprint (Shift)", Description = "Shift = 2.5× velocidade configurada",
     Default = false,
     Callback = function(v)
         dis("sprint")
@@ -189,7 +192,6 @@ T.Move:AddToggle("Sprint", {
     end,
 })
 
--- Fly
 local flySpeed  = 60
 local flyActive = false
 
@@ -199,7 +201,6 @@ T.Move:AddToggle("Fly", {
     Callback = function(v)
         flyActive = v
         local root = getRoot(); if not root then return end
-
         if not v then
             dis("fly")
             for _, o in ipairs(root:GetChildren()) do
@@ -218,7 +219,7 @@ T.Move:AddToggle("Fly", {
         bg.D = 50
         bg.Parent = root
 
-        local cam = workspace.CurrentCamera
+        local cam = getCam()
         con("fly", RunService.Heartbeat, function()
             if not flyActive then return end
             root = getRoot(); if not root then return end
@@ -256,7 +257,6 @@ T.Move:AddButton({
 -- ║                     ABA  JOGADOR                           ║
 -- ╚══════════════════════════════════════════════════════════════╝
 
--- God Mode
 T.Play:AddToggle("GodMode", {
     Title = "God Mode", Description = "HP sempre no máximo",
     Default = false,
@@ -268,7 +268,6 @@ T.Play:AddToggle("GodMode", {
     end,
 })
 
--- Noclip
 T.Play:AddToggle("Noclip", {
     Title = "Noclip", Description = "Atravessa paredes e objetos",
     Default = false,
@@ -290,7 +289,6 @@ T.Play:AddToggle("Noclip", {
     end,
 })
 
--- Anti-AFK
 T.Play:AddToggle("AntiAFK", {
     Title = "Anti-AFK", Description = "Nunca toma kick por inatividade",
     Default = false,
@@ -298,15 +296,14 @@ T.Play:AddToggle("AntiAFK", {
         dis("afk")
         if v then
             con("afk", LP.Idled, function()
-                VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+                VirtualUser:Button2Down(Vector2.new(0, 0), getCam().CFrame)
                 task.wait(0.1)
-                VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+                VirtualUser:Button2Up(Vector2.new(0, 0), getCam().CFrame)
             end)
         end
     end,
 })
 
--- Invisibilidade local
 T.Play:AddToggle("Invisible", {
     Title = "Invisibilidade (local)", Description = "Só você desaparece na sua tela",
     Default = false,
@@ -318,7 +315,6 @@ T.Play:AddToggle("Invisible", {
     end,
 })
 
--- Teleport → Spawn
 T.Play:AddButton({
     Title = "Teleport → Spawn",
     Callback = function()
@@ -333,34 +329,29 @@ T.Play:AddButton({
     end,
 })
 
--- Teleport → Cursor
 T.Play:AddButton({
     Title = "Teleport → Cursor (clique no mapa)",
     Callback = function()
-        notify("Modo Clique", "Clique no chão para teleportar. ESC cancela.")
+        notify("Modo Clique", "Clique no chão. ESC cancela.")
         local tmp
         tmp = UserInput.InputBegan:Connect(function(inp)
             if inp.UserInputType == Enum.UserInputType.MouseButton1 then
-                local mouse = getMouse()
-                local root  = getRoot()
+                local mouse = getMouse(); local root = getRoot()
                 if root and mouse.Target then
                     root.CFrame = CFrame.new(mouse.Hit.Position + Vector3.new(0, 5, 0))
                     notify("Teleport", "Teleportado!")
                 end
                 tmp:Disconnect()
             elseif inp.KeyCode == Enum.KeyCode.Escape then
-                tmp:Disconnect()
-                notify("Cancelado", "Teleport cancelado.")
+                tmp:Disconnect(); notify("Cancelado", "Teleport cancelado.")
             end
         end)
     end,
 })
 
--- ── Teleport para Qualquer Jogador ──────────────────────────────
-
 T.Play:AddParagraph({
     Title   = "Teleport para Jogador",
-    Content = "Selecione quem você quer visitar no dropdown abaixo.",
+    Content = "Selecione no dropdown e clique no botão.",
 })
 
 local dropTpPlayer = T.Play:AddDropdown("TpPlayerTarget", {
@@ -372,8 +363,7 @@ local dropTpPlayer = T.Play:AddDropdown("TpPlayerTarget", {
 })
 
 T.Play:AddButton({
-    Title = "⚡ Teleportar para o Jogador Selecionado",
-    Description = "Vai até o jogador escolhido no dropdown",
+    Title = "⚡ Ir até o Jogador Selecionado",
     Callback = function()
         local nome = Options.TpPlayerTarget and Options.TpPlayerTarget.Value
         if not nome or nome == "(nenhum)" then notify("Erro", "Selecione um jogador."); return end
@@ -383,7 +373,7 @@ T.Play:AddButton({
             root.CFrame = alvo.Character.HumanoidRootPart.CFrame + Vector3.new(0, 5, 0)
             notify("Teleport", "Chegou em " .. nome .. "!")
         else
-            notify("Erro", nome .. " não está disponível.")
+            notify("Erro", nome .. " não disponível.")
         end
     end,
 })
@@ -392,384 +382,370 @@ T.Play:AddButton({
     Title = "🔄 Atualizar Lista de Jogadores",
     Callback = function()
         local lista = playerList()
-        dropTpPlayer:SetValues(lista)
-        dropTpPlayer:SetValue(lista[1])
+        dropTpPlayer:SetValues(lista); dropTpPlayer:SetValue(lista[1])
         notify("Atualizado", #lista .. " jogador(es) encontrado(s).")
     end,
 })
 
--- Atualiza automaticamente
 Players.PlayerAdded:Connect(function()
-    task.wait(1)
-    local lista = playerList()
-    dropTpPlayer:SetValues(lista)
+    task.wait(1); local l = playerList(); dropTpPlayer:SetValues(l)
 end)
 Players.PlayerRemoving:Connect(function()
-    task.wait(0.5)
-    local lista = playerList()
-    dropTpPlayer:SetValues(lista)
+    task.wait(0.5); local l = playerList(); dropTpPlayer:SetValues(l)
 end)
 
 -- ╔══════════════════════════════════════════════════════════════╗
 -- ║                   ABA  BROOKHAVEN                          ║
 -- ╚══════════════════════════════════════════════════════════════╝
 
--- ══ 1. CAR SPEED ═════════════════════════════════════════════════
+-- ══ CAR SPEED (CORRIGIDO) ═══════════════════════════════════════
+-- O Brookhaven reseta MaxSpeed via scripts internos a cada frame.
+-- A solução é um loop Heartbeat que FORÇA o valor constantemente,
+-- sobrescrevendo o script do jogo antes que ele tome efeito.
 
 T.BK:AddParagraph({
-    Title   = "🚗 Modificador de Carro",
-    Content = "Entre no veículo ANTES de usar. Funciona sem Premium.",
+    Title   = "🚗 Velocidade de Veículo",
+    Content = "Ative o toggle DEPOIS de entrar no veículo.\nO loop força a velocidade a cada frame, sobrescrevendo o script do Brookhaven.",
 })
 
 T.BK:AddSlider("CarSpeed", {
-    Title = "Velocidade Máxima", Description = "Padrão Brookhaven: ~80",
-    Default = 80, Min = 0, Max = 3000, Rounding = 0,
+    Title = "Velocidade Máxima (MaxSpeed)", Description = "Padrão Brookhaven: ~80 | Recomendado: até 500",
+    Default = 80, Min = 0, Max = 1000, Rounding = 0,
     Callback = function(v)
-        local s = getVehicleSeat()
-        if s then s.MaxSpeed = v; notify("Carro", "MaxSpeed → " .. v)
-        else notify("Erro", "Entre em um carro primeiro!") end
+        -- Atualiza em tempo real se o loop já estiver ativo
+        local s = findAnyVehicleSeat()
+        if s then s.MaxSpeed = v end
     end,
 })
 
 T.BK:AddSlider("CarTorque", {
     Title = "Torque (aceleração)", Description = "Padrão: ~200",
-    Default = 200, Min = 0, Max = 9999, Rounding = 0,
+    Default = 200, Min = 50, Max = 9999, Rounding = 0,
     Callback = function(v)
-        local s = getVehicleSeat()
+        local s = findAnyVehicleSeat()
         if s then s.Torque = v end
     end,
 })
 
 T.BK:AddToggle("CarLoop", {
-    Title = "Manter velocidade automaticamente",
-    Description = "Re-aplica a cada frame enquanto você dirige",
-    Default = false,
-    Callback = function(v)
+    Title       = "🔁 Ativar Speed Hack (loop forçado)",
+    Description = "Força MaxSpeed e Torque a cada frame — necessário no Brookhaven",
+    Default     = false,
+    Callback    = function(v)
         dis("carloop")
-        if not v then return end
+        if not v then
+            -- Restaura padrão ao desativar
+            local s = findAnyVehicleSeat()
+            if s then s.MaxSpeed = 80; s.Torque = 200 end
+            notify("Carro", "Speed hack desativado. Valores restaurados.")
+            return
+        end
+        notify("Carro 🚗", "Speed hack ativado! Entre no veículo e acelere.")
         con("carloop", RunService.Heartbeat, function()
-            local s = getVehicleSeat(); if not s then return end
-            if Options.CarSpeed  then s.MaxSpeed = Options.CarSpeed.Value  end
-            if Options.CarTorque then s.Torque   = Options.CarTorque.Value end
+            local s = findAnyVehicleSeat(); if not s then return end
+            -- Força os valores a cada frame, antes do script do Brookhaven resetar
+            local spd = Options.CarSpeed  and Options.CarSpeed.Value  or 80
+            local trq = Options.CarTorque and Options.CarTorque.Value or 200
+            -- Usa pcall pra não quebrar se o seat for protegido
+            pcall(function()
+                if s.MaxSpeed ~= spd then s.MaxSpeed = spd end
+                if s.Torque   ~= trq then s.Torque   = trq end
+            end)
         end)
     end,
 })
 
 T.BK:AddButton({
-    Title = "✅ Aplicar no Carro Atual",
-    Description = "Aplica Speed e Torque de uma vez",
+    Title = "✅ Aplicar uma vez no Carro Atual",
+    Description = "Aplica sem o loop — use se o loop não funcionar",
     Callback = function()
-        local s = getVehicleSeat()
-        if not s then notify("Erro", "Entre em um carro primeiro!"); return end
-        s.MaxSpeed = Options.CarSpeed  and Options.CarSpeed.Value  or 500
-        s.Torque   = Options.CarTorque and Options.CarTorque.Value or 1000
-        notify("Carro", ("Aplicado! Speed: %d | Torque: %d"):format(s.MaxSpeed, s.Torque))
+        local s = findAnyVehicleSeat()
+        if not s then
+            notify("Erro", "Nenhum VehicleSeat encontrado próximo (<=20 studs).\nEntre no carro primeiro!")
+            return
+        end
+        local spd = Options.CarSpeed  and Options.CarSpeed.Value  or 80
+        local trq = Options.CarTorque and Options.CarTorque.Value or 200
+        pcall(function()
+            s.MaxSpeed = spd
+            s.Torque   = trq
+        end)
+        notify("Carro ✅", ("Speed: %d | Torque: %d\nSeat: %s"):format(spd, trq, s.Name))
     end,
 })
 
-T.BK:AddButton({
-    Title = "🔁 Resetar Carro (padrão)",
-    Callback = function()
-        local s = getVehicleSeat()
-        if s then s.MaxSpeed = 80; s.Torque = 200; notify("Carro", "Resetado ao padrão.")
-        else notify("Erro", "Entre em um carro primeiro!") end
-    end,
-})
-
--- ══ 2. SPY PLAYER ════════════════════════════════════════════════
+-- ══ VIEW PLAYER ════════════════════════════════════════════════
+-- Muda o CameraSubject para o HumanoidRootPart do alvo,
+-- colocando sua câmera na perspectiva exata dele.
 
 T.BK:AddParagraph({
-    Title   = "🔍 Spy Player",
-    Content = "Monitora HP, posição, ferramenta e distância de um jogador.",
+    Title   = "👁️ View Player",
+    Content = "Sua câmera vai para a perspectiva do jogador escolhido.\nDesative para voltar ao normal.",
 })
 
-local spyGui = nil
+local origCamSubject = nil
+local origCamType    = nil
 
-local function buildSpyUI(plr)
-    if spyGui then spyGui:Destroy() end
-    spyGui = Instance.new("ScreenGui", LP.PlayerGui)
-    spyGui.Name           = "_SpyHD"
-    spyGui.ResetOnSpawn   = false
-    spyGui.IgnoreGuiInset = true
-    spyGui.DisplayOrder   = 999
+local dropAlvo = T.BK:AddDropdown("AlvoGeral", {
+    Title       = "Selecionar Alvo (View / Fling)",
+    Description = "Usado tanto pelo View quanto pelos flings",
+    Values      = playerList(),
+    Default     = playerList()[1],
+    Multi       = false,
+    Callback    = function(_) end,
+})
 
-    -- Fundo arredondado
-    local panel = Instance.new("Frame", spyGui)
-    panel.Size                  = UDim2.fromOffset(280, 160)
-    panel.Position              = UDim2.new(1, -292, 0, 12)
-    panel.BackgroundColor3      = Color3.fromRGB(10, 10, 15)
-    panel.BackgroundTransparency= 0.08
-    panel.BorderSizePixel       = 0
-    Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 10)
+T.BK:AddToggle("ViewActive", {
+    Title       = "👁️ Ativar View",
+    Description = "Coloca sua câmera na visão do jogador selecionado",
+    Default     = false,
+    Callback    = function(v)
+        local cam = getCam()
 
-    -- Barra de título
-    local bar = Instance.new("Frame", panel)
-    bar.Size             = UDim2.new(1, 0, 0, 32)
-    bar.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-    bar.BorderSizePixel  = 0
-    Instance.new("UICorner", bar).CornerRadius = UDim.new(0, 10)
-
-    local title = Instance.new("TextLabel", bar)
-    title.Size               = UDim2.fromScale(1, 1)
-    title.BackgroundTransparency = 1
-    title.Text               = "🔍  Spy: " .. plr.DisplayName .. "  (@" .. plr.Name .. ")"
-    title.TextColor3         = Color3.fromRGB(255, 215, 60)
-    title.TextScaled         = true
-    title.Font               = Enum.Font.GothamBold
-    title.TextXAlignment     = Enum.TextXAlignment.Center
-
-    -- Linhas de info
-    local function row(yPos, cor)
-        local lbl = Instance.new("TextLabel", panel)
-        lbl.Size               = UDim2.new(1, -16, 0, 24)
-        lbl.Position           = UDim2.fromOffset(8, yPos)
-        lbl.BackgroundTransparency = 1
-        lbl.TextColor3         = cor
-        lbl.TextScaled         = true
-        lbl.Font               = Enum.Font.Gotham
-        lbl.TextXAlignment     = Enum.TextXAlignment.Left
-        lbl.Text               = "Carregando..."
-        return lbl
-    end
-
-    local rHP   = row(36,  Color3.fromRGB(100, 255, 120))
-    local rPos  = row(64,  Color3.fromRGB(100, 180, 255))
-    local rTool = row(92,  Color3.fromRGB(255, 190, 80))
-    local rDist = row(120, Color3.fromRGB(200, 200, 200))
-    local rState= row(144, Color3.fromRGB(160, 160, 255))
-
-    con("spy", RunService.Heartbeat, function()
-        local char = plr.Character
-        if not char then rHP.Text = "❤  Offline"; return end
-
-        local hum  = char:FindFirstChildOfClass("Humanoid")
-        local root = char:FindFirstChild("HumanoidRootPart")
-        local mine = getRoot()
-
-        -- HP
-        if hum then
-            local pct = hum.Health / hum.MaxHealth
-            rHP.TextColor3 = Color3.fromRGB(math.floor(255*(1-pct)), math.floor(255*pct), 50)
-            rHP.Text = ("❤  %d / %d   (%d%%)"):format(
-                math.floor(hum.Health), math.floor(hum.MaxHealth), math.floor(pct*100))
-        end
-
-        -- Posição
-        if root then
-            local p = root.Position
-            rPos.Text = ("📍  X:%.1f  Y:%.1f  Z:%.1f"):format(p.X, p.Y, p.Z)
-            if mine then
-                rDist.Text = ("📏  Distância: %.1f studs"):format(
-                    (root.Position - mine.Position).Magnitude)
+        if not v then
+            -- Restaura câmera original
+            dis("view_lock")
+            cam.CameraType = origCamType or Enum.CameraType.Custom
+            if origCamSubject then
+                cam.CameraSubject = origCamSubject
+            else
+                local hum = getHum()
+                if hum then cam.CameraSubject = hum end
             end
+            origCamSubject = nil
+            origCamType    = nil
+            notify("View", "Câmera restaurada.")
+            return
         end
 
-        -- Ferramenta
-        local tool = char:FindFirstChildOfClass("Tool")
-        rTool.Text = tool and ("🔧  " .. tool.Name) or "🔧  Sem ferramenta"
+        local nome = Options.AlvoGeral and Options.AlvoGeral.Value
+        local alvo = nome and Players:FindFirstChild(nome)
+        if not alvo then notify("Erro", "Jogador não encontrado."); return end
 
-        -- Estado
-        if hum then
-            local states = {
-                [Enum.HumanoidStateType.Running]  = "🏃 Correndo",
-                [Enum.HumanoidStateType.Jumping]  = "🦘 Pulando",
-                [Enum.HumanoidStateType.Freefall] = "🪂 Caindo",
-                [Enum.HumanoidStateType.Seated]   = "🪑 Sentado",
-                [Enum.HumanoidStateType.Swimming] = "🏊 Nadando",
-                [Enum.HumanoidStateType.Dead]     = "💀 Morto",
-            }
-            rState.Text = states[hum:GetState()] or "❓ Desconhecido"
+        local alvoChar = alvo.Character
+        local alvoHum  = alvoChar and alvoChar:FindFirstChildOfClass("Humanoid")
+        if not alvoHum then
+            notify("Erro", alvo.Name .. " não tem personagem no momento."); return
         end
-    end)
-end
 
-local dropSpy = T.BK:AddDropdown("SpyTarget", {
-    Title    = "Selecionar Alvo (Spy / Kill)",
-    Description = "Este dropdown é usado tanto pelo Spy quanto pelos kills",
-    Values   = playerList(),
-    Default  = playerList()[1],
-    Multi    = false,
-    Callback = function(_) end,
-})
+        -- Salva estado atual da câmera
+        origCamSubject = cam.CameraSubject
+        origCamType    = cam.CameraType
 
-T.BK:AddToggle("SpyActive", {
-    Title = "Ativar Spy",
-    Description = "Painel com HP, posição, ferramenta, distância e estado",
-    Default = false,
-    Callback = function(v)
-        dis("spy")
-        if spyGui then spyGui:Destroy(); spyGui = nil end
-        if not v then return end
-        local nome = Options.SpyTarget and Options.SpyTarget.Value
-        local plr  = nome and Players:FindFirstChild(nome)
-        if not plr then notify("Erro", "Selecione um jogador válido."); return end
-        buildSpyUI(plr)
-        notify("Spy", "Espionando " .. plr.Name .. "!")
+        -- Muda câmera para seguir o alvo
+        cam.CameraType    = Enum.CameraType.Custom
+        cam.CameraSubject = alvoHum
+
+        -- Reconecta se o alvo respawnar
+        con("view_lock", Players.LocalPlayer.CharacterAdded, function()
+            task.wait(1)
+            local newChar = alvo.Character
+            local newHum  = newChar and newChar:FindFirstChildOfClass("Humanoid")
+            if newHum and Options.ViewActive and Options.ViewActive.Value then
+                cam.CameraSubject = newHum
+            end
+        end)
+
+        notify("View 👁️", "Câmera travada em " .. alvo.Name .. "!\nDesative o toggle para voltar.")
     end,
 })
 
 T.BK:AddButton({
-    Title = "🔄 Atualizar Lista (Spy / Kill)",
+    Title = "🔄 Atualizar Lista (View / Fling)",
     Callback = function()
         local lista = playerList()
-        dropSpy:SetValues(lista); dropSpy:SetValue(lista[1])
+        dropAlvo:SetValues(lista);     dropAlvo:SetValue(lista[1])
         dropTpPlayer:SetValues(lista); dropTpPlayer:SetValue(lista[1])
-        notify("Atualizado", #lista .. " jogador(es) na lista.")
+        notify("Atualizado", #lista .. " jogador(es).")
     end,
 })
 
--- ══ 3. KILL PLAYERS ══════════════════════════════════════════════
+-- ══ FLING PLAYERS ══════════════════════════════════════════════
 
 T.BK:AddParagraph({
-    Title   = "💀 Kill Players",
-    Content = "Usa o alvo selecionado no dropdown acima.\nEscolha o método de kill abaixo.",
+    Title   = "💀 Fling Players",
+    Content = "⚽ Bola  — Spama bola até voar\n⛵ Barco — Spama barco até voar\n🛋️ Sofá  — TP no void junto com o alvo",
 })
 
--- Função central de kill
-local function doKill(method)
-    local nome = Options.SpyTarget and Options.SpyTarget.Value
-    local alvo = nome and Players:FindFirstChild(nome)
-    if not alvo or not alvo.Character then
-        notify("Erro", "Selecione um alvo válido no dropdown."); return
-    end
+T.BK:AddButton({
+    Title = "⚽ Fling com Bola",
+    Description = "Spama a bola no alvo repetidamente",
+    Callback = function()
+        local nome = Options.AlvoGeral and Options.AlvoGeral.Value
+        local alvo = nome and Players:FindFirstChild(nome)
+        if not alvo or not alvo.Character then
+            notify("Erro", "Selecione um alvo válido."); return
+        end
 
-    local alvoRoot = alvo.Character:FindFirstChild("HumanoidRootPart")
-    local myRoot   = getRoot()
-    if not alvoRoot or not myRoot then return end
+        local ball = findTool("Ball", "Bola", "Soccer", "Football", "SoccerBall", "BasketBall", "Balloon")
+        if not ball then notify("Erro ⚽", "Nenhuma bola encontrada no mapa!"); return end
 
-    -- Vai até o alvo
-    myRoot.CFrame = alvoRoot.CFrame + Vector3.new(0, 4, 0)
-    task.wait(0.15)
+        notify("Fling ⚽", "Spamando bola em " .. nome .. "...")
 
-    if method == "bola" then
-        -- Procura bola no workspace inteiro
-        local ball = findTool("Ball", "Bola", "Soccer", "Football", "SoccerBall")
-        if ball then
-            local h = getHum()
-            if h and ball:IsA("Tool") then
-                h:EquipTool(ball)
-                task.wait(0.1)
-            end
-            -- Aplica velocidade na BasePart da bola em direção ao alvo
-            local part = (ball:IsA("BasePart") and ball)
-                or ball:FindFirstChildOfClass("BasePart")
-            if part then
-                for _ = 1, 5 do
-                    part.Velocity = (alvoRoot.Position - part.Position).Unit * 150
-                    task.wait(0.05)
+        local h = getHum()
+        if h and ball:IsA("Tool") then h:EquipTool(ball); task.wait(0.15) end
+
+        task.spawn(function()
+            local part = (ball:IsA("BasePart") and ball) or ball:FindFirstChildOfClass("BasePart")
+
+            for _ = 1, 30 do
+                local alvoRoot = alvo.Character and alvo.Character:FindFirstChild("HumanoidRootPart")
+                if not alvoRoot then break end
+
+                if part then
+                    part.CFrame = alvoRoot.CFrame + Vector3.new(0, 1, 0)
+                    local bv = Instance.new("BodyVelocity", part)
+                    bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+                    bv.Velocity = Vector3.new(
+                        math.random(-1, 1) * 999,
+                        math.random(300, 999),
+                        math.random(-1, 1) * 999
+                    )
+                    Debris:AddItem(bv, 0.05)
+                else
+                    -- Fallback: projétil do próprio char
+                    local myRoot = getRoot(); if not myRoot then break end
+                    myRoot.CFrame = alvoRoot.CFrame + Vector3.new(0, 2, 0)
+                    local bv = Instance.new("BodyVelocity", myRoot)
+                    bv.MaxForce = Vector3.new(1e8, 1e8, 1e8)
+                    bv.Velocity = (alvoRoot.Position - myRoot.Position).Unit * 999
+                    Debris:AddItem(bv, 0.05)
                 end
-                notify("Kill 🔵 Bola", "Bola lançada em " .. nome .. "!")
-            else
-                notify("Aviso", "Bola sem BasePart — tentando arremesso.")
-                myRoot.Velocity = (alvoRoot.Position - myRoot.Position).Unit * 200
-            end
-        else
-            -- Fallback: arremessa o próprio personagem
-            local bv = Instance.new("BodyVelocity", myRoot)
-            bv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
-            bv.Velocity = (alvoRoot.Position - myRoot.Position).Unit * 250
-            Debris:AddItem(bv, 0.4)
-            notify("Kill 🔵 Bola (fallback)", "Bola não encontrada — arremessou o personagem!")
-        end
-
-    elseif method == "barco" then
-        local boat = findTool("Boat", "Barco", "Speedboat", "Sailboat")
-        if boat then
-            -- Pega a parte principal do barco
-            local boatRoot = boat:FindFirstChild("VehicleSeat")
-                or boat:FindFirstChildOfClass("BasePart")
-            if boatRoot then
-                boatRoot.CFrame = alvoRoot.CFrame + Vector3.new(0, 6, 0)
-                task.wait(0.1)
-                -- Impulsiona o barco
-                boatRoot.Velocity = Vector3.new(0, -80, 0)
-                local seat = boat:FindFirstChild("VehicleSeat")
-                if seat then seat.MaxSpeed = 9999; seat.Torque = 9999 end
-                notify("Kill ⛵ Barco", "Barco derrubado em " .. nome .. "!")
-            end
-        else
-            -- Fallback: queda de altura
-            myRoot.CFrame = alvoRoot.CFrame + Vector3.new(0, 60, 0)
-            local bv = Instance.new("BodyVelocity", myRoot)
-            bv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
-            bv.Velocity = Vector3.new(0, -200, 0)
-            Debris:AddItem(bv, 0.5)
-            notify("Kill ⛵ Barco (fallback)", "Barco não encontrado — queda livre!")
-        end
-
-    elseif method == "sofa" then
-        local sofa = findTool("Sofa", "Couch", "Sofá")
-        if sofa then
-            local sofaRoot = sofa:FindFirstChildOfClass("BasePart")
-                or sofa:FindFirstChild("VehicleSeat")
-            if sofaRoot then
-                -- Teleporta o sofá em cima do alvo em alta velocidade
-                sofaRoot.CFrame = alvoRoot.CFrame + Vector3.new(0, 25, 0)
                 task.wait(0.05)
-                sofaRoot.Velocity = Vector3.new(0, -200, 0)
-                notify("Kill 🛋️ Sofá", "Sofá jogado em " .. nome .. "!")
             end
-        else
-            -- Fallback: lança personagem de cima
-            myRoot.CFrame = alvoRoot.CFrame + Vector3.new(0, 30, 0)
-            local bv = Instance.new("BodyVelocity", myRoot)
-            bv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
-            bv.Velocity = Vector3.new(0, -300, 0)
-            Debris:AddItem(bv, 0.4)
-            notify("Kill 🛋️ Sofá (fallback)", "Sofá não encontrado — queda no alvo!")
+            notify("Fling ⚽", nome .. " deve ter saído voando!")
+        end)
+    end,
+})
+
+T.BK:AddButton({
+    Title = "⛵ Fling com Barco",
+    Description = "Spama o barco em cima do alvo",
+    Callback = function()
+        local nome = Options.AlvoGeral and Options.AlvoGeral.Value
+        local alvo = nome and Players:FindFirstChild(nome)
+        if not alvo or not alvo.Character then
+            notify("Erro", "Selecione um alvo válido."); return
         end
-    end
-end
 
-T.BK:AddButton({
-    Title = "⚽ Kill com Bola",
-    Description = "Lança a bola do Brookhaven no alvo",
-    Callback = function() doKill("bola") end,
+        local boat = findTool("Boat", "Barco", "Speedboat", "Sailboat", "Motorboat", "Yacht", "Ship")
+        if not boat then notify("Erro ⛵", "Nenhum barco encontrado no mapa!"); return end
+
+        notify("Fling ⛵", "Spamando barco em " .. nome .. "...")
+
+        task.spawn(function()
+            local boatPart = boat:IsA("BasePart") and boat
+                or boat:FindFirstChild("VehicleSeat")
+                or boat:FindFirstChildOfClass("BasePart")
+
+            if not boatPart then notify("Erro ⛵", "Barco sem BasePart."); return end
+
+            local seat = boat:FindFirstChild("VehicleSeat") or (boat:IsA("VehicleSeat") and boat)
+            if seat then pcall(function() seat.MaxSpeed = 9999; seat.Torque = 9999 end) end
+
+            for _ = 1, 25 do
+                local alvoRoot = alvo.Character and alvo.Character:FindFirstChild("HumanoidRootPart")
+                if not alvoRoot then break end
+
+                pcall(function()
+                    boatPart.CFrame = alvoRoot.CFrame + Vector3.new(0, 10, 0)
+                    local bv = Instance.new("BodyVelocity", boatPart)
+                    bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+                    bv.Velocity = Vector3.new(
+                        math.random(-400, 400),
+                        -800,
+                        math.random(-400, 400)
+                    )
+                    Debris:AddItem(bv, 0.06)
+                end)
+                task.wait(0.06)
+            end
+            notify("Fling ⛵", nome .. " deve ter saído voando!")
+        end)
+    end,
 })
 
 T.BK:AddButton({
-    Title = "⛵ Kill com Barco",
-    Description = "Derruba o barco em cima do alvo",
-    Callback = function() doKill("barco") end,
-})
+    Title = "🛋️ Void com Sofá",
+    Description = "Você pega o sofá e dá TP no void junto com o alvo",
+    Callback = function()
+        local nome = Options.AlvoGeral and Options.AlvoGeral.Value
+        local alvo = nome and Players:FindFirstChild(nome)
+        if not alvo or not alvo.Character then
+            notify("Erro", "Selecione um alvo válido."); return
+        end
 
-T.BK:AddButton({
-    Title = "🛋️ Kill com Sofá",
-    Description = "Joga o sofá em cima do alvo",
-    Callback = function() doKill("sofa") end,
+        local alvoRoot = alvo.Character:FindFirstChild("HumanoidRootPart")
+        local myRoot   = getRoot()
+        if not alvoRoot or not myRoot then return end
+
+        local sofa = findTool("Sofa", "Sofá", "Couch", "Furniture", "Loveseat", "Armchair")
+        if not sofa then
+            notify("Erro 🛋️", "Nenhum sofá encontrado!\nPegue um sofá no Brookhaven primeiro.")
+            return
+        end
+
+        notify("Void 🛋️", "Indo pro void com " .. nome .. "...")
+
+        task.spawn(function()
+            -- Equipa o sofá
+            local h = getHum()
+            if h and sofa:IsA("Tool") then
+                h:EquipTool(sofa); task.wait(0.2)
+            end
+
+            local startPos = myRoot.Position
+            local voidY    = -5000
+            local steps    = 40
+
+            for i = 1, steps do
+                myRoot   = getRoot()
+                alvoRoot = alvo.Character and alvo.Character:FindFirstChild("HumanoidRootPart")
+                if not myRoot or not alvoRoot then break end
+
+                local t    = i / steps
+                local newY = startPos.Y + (voidY - startPos.Y) * t
+
+                -- Move os dois juntos pro void
+                pcall(function()
+                    myRoot.CFrame   = CFrame.new(startPos.X, newY, startPos.Z)
+                    alvoRoot.CFrame = CFrame.new(startPos.X + 2, newY, startPos.Z)
+                end)
+                task.wait(0.025)
+            end
+
+            notify("Void 🛋️", nome .. " foi pro void!\nDê respawn para voltar.")
+        end)
+    end,
 })
 
 -- ╔══════════════════════════════════════════════════════════════╗
 -- ║                     ABA  VISUAL                            ║
 -- ╚══════════════════════════════════════════════════════════════╝
 
--- FullBright
 T.Vis:AddToggle("FullBright", {
     Title = "FullBright", Description = "Remove escuridão, névoa e sombras",
     Default = false,
     Callback = function(v)
         if v then
-            Lighting.Brightness    = 10
-            Lighting.ClockTime     = 14
-            Lighting.FogEnd        = 1e9
-            Lighting.GlobalShadows = false
-            Lighting.Ambient       = Color3.fromRGB(255, 255, 255)
+            Lighting.Brightness = 10; Lighting.ClockTime = 14
+            Lighting.FogEnd = 1e9;    Lighting.GlobalShadows = false
+            Lighting.Ambient = Color3.fromRGB(255, 255, 255)
         else
             for k, val in pairs(ORIG) do Lighting[k] = val end
         end
     end,
 })
 
--- FOV
 T.Vis:AddSlider("FOV", {
     Title = "FOV", Description = "Padrão: 70",
     Default = 70, Min = 30, Max = 120, Rounding = 0,
-    Callback = function(v) workspace.CurrentCamera.FieldOfView = v end,
+    Callback = function(v) getCam().FieldOfView = v end,
 })
 
 con("camfov", workspace:GetPropertyChangedSignal("CurrentCamera"), function()
     task.wait()
-    if Options.FOV then workspace.CurrentCamera.FieldOfView = Options.FOV.Value end
+    if Options.FOV then getCam().FieldOfView = Options.FOV.Value end
 end)
 
 -- ESP
@@ -792,17 +768,16 @@ local function buildESP()
             if not root then return end
 
             local bb = Instance.new("BillboardGui")
-            bb.Adornee     = root
-            bb.AlwaysOnTop = true
-            bb.Size        = UDim2.fromOffset(150, 54)
-            bb.StudsOffset = Vector3.new(0, 3.8, 0)
-            bb.Parent      = root
+            bb.Adornee = root; bb.AlwaysOnTop = true
+            bb.Size = UDim2.fromOffset(150, 56)
+            bb.StudsOffset = Vector3.new(0, 4, 0)
+            bb.Parent = root
 
             local bg = Instance.new("Frame", bb)
-            bg.BackgroundColor3        = Color3.fromRGB(12, 12, 12)
-            bg.BackgroundTransparency  = 0.3
-            bg.BorderSizePixel         = 0
-            bg.Size                    = UDim2.fromScale(1, 1)
+            bg.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
+            bg.BackgroundTransparency = 0.3
+            bg.BorderSizePixel = 0
+            bg.Size = UDim2.fromScale(1, 1)
             Instance.new("UICorner", bg).CornerRadius = UDim.new(0, 6)
 
             local function lbl(y, h, cor, font)
@@ -822,29 +797,28 @@ local function buildESP()
             local nameL = lbl(2,  22, Color3.fromRGB(255, 220, 60), Enum.Font.GothamBold)
             local hpL   = lbl(26, 16, Color3.fromRGB(100, 255, 100))
             local toolL = lbl(44, 14, Color3.fromRGB(200, 200, 255))
+            nameL.Text  = plr.DisplayName
 
-            nameL.Text = plr.DisplayName
-
-            con("esp_"..plr.UserId, RunService.Heartbeat, function()
+            con("esp_" .. plr.UserId, RunService.Heartbeat, function()
                 local hum = char:FindFirstChildOfClass("Humanoid")
                 if not hum or not hpL.Parent then return end
                 local pct = hum.Health / hum.MaxHealth
-                hpL.TextColor3 = Color3.fromRGB(math.floor(255*(1-pct)), math.floor(255*pct), 50)
-                hpL.Text = ("❤ %d  (%d%%)"):format(math.floor(hum.Health), math.floor(pct*100))
+                hpL.TextColor3 = Color3.fromRGB(
+                    math.floor(255 * (1 - pct)), math.floor(255 * pct), 50)
+                hpL.Text = ("❤ %d  (%d%%)"):format(math.floor(hum.Health), math.floor(pct * 100))
                 local tool = char:FindFirstChildOfClass("Tool")
-                toolL.Text = tool and ("🔧 "..tool.Name) or ""
+                toolL.Text = tool and ("🔧 " .. tool.Name) or ""
             end)
 
             table.insert(espBoards, bb)
         end
-
         setup(plr.Character)
         plr.CharacterAdded:Connect(setup)
     end
 end
 
 T.Vis:AddToggle("ESP", {
-    Title = "ESP  (Nome + HP + Ferramenta)", Description = "Cor do HP vai de verde → vermelho",
+    Title = "ESP  (Nome + HP + Ferramenta)", Description = "Verde = vivo · Vermelho = quase morto",
     Default = false,
     Callback = function(v)
         if v then
@@ -861,7 +835,6 @@ T.Vis:AddToggle("ESP", {
     end,
 })
 
--- Tracers
 T.Vis:AddToggle("Tracers", {
     Title = "Tracers", Description = "Linha da tela até cada jogador",
     Default = false,
@@ -876,7 +849,7 @@ T.Vis:AddToggle("Tracers", {
 
         con("tracers", RunService.RenderStepped, function()
             for _, f in ipairs(gui:GetChildren()) do f:Destroy() end
-            local cam  = workspace.CurrentCamera
+            local cam  = getCam()
             local vp   = cam.ViewportSize
             local orig = Vector2.new(vp.X / 2, vp.Y)
 
@@ -901,7 +874,6 @@ T.Vis:AddToggle("Tracers", {
     end,
 })
 
--- Crosshair
 T.Vis:AddToggle("Crosshair", {
     Title = "Crosshair", Description = "Mira no centro da tela",
     Default = false,
@@ -931,33 +903,24 @@ T.Wld:AddSlider("Gravity", {
     Callback = function(v) workspace.Gravity = v end,
 })
 
--- Botões de clima
-local function setWeather(ct, bright, fe, amb)
-    Lighting.ClockTime  = ct
-    Lighting.Brightness = bright
-    Lighting.FogEnd     = fe
-    Lighting.Ambient    = Color3.fromRGB(table.unpack(amb))
+local function weather(ct, bright, fe, r, g, b)
+    Lighting.ClockTime = ct;   Lighting.Brightness = bright
+    Lighting.FogEnd    = fe;   Lighting.Ambient    = Color3.fromRGB(r, g, b)
 end
 
-T.Wld:AddButton({ Title = "☀️ Clima: Normal",
-    Callback = function() setWeather(14, 2, 1e6, {100,100,100}) end })
-T.Wld:AddButton({ Title = "🌙 Clima: Noite Fechada",
-    Callback = function() setWeather(0,  0,  200, {20,20,60})    end })
-T.Wld:AddButton({ Title = "🌅 Clima: Pôr do Sol",
-    Callback = function() setWeather(18, 1.5, 800, {255,140,60}) end })
-T.Wld:AddButton({ Title = "🌫️ Clima: Névoa Densa",
-    Callback = function()
-        Lighting.ClockTime = 10; Lighting.FogEnd = 80
-        Lighting.FogColor  = Color3.fromRGB(180,180,180); Lighting.Brightness = 1
-    end })
-T.Wld:AddButton({ Title = "🌌 Clima: Madrugada",
-    Callback = function() setWeather(3, 0.2, 300, {30,30,80}) end })
+T.Wld:AddButton({ Title = "☀️ Normal",        Callback = function() weather(14, 2,   1e6, 100,100,100) end })
+T.Wld:AddButton({ Title = "🌙 Noite Fechada", Callback = function() weather(0,  0,   200, 20,20,60)    end })
+T.Wld:AddButton({ Title = "🌅 Pôr do Sol",    Callback = function() weather(18, 1.5, 800, 255,140,60)  end })
+T.Wld:AddButton({ Title = "🌌 Madrugada",     Callback = function() weather(3,  0.2, 300, 30,30,80)    end })
+T.Wld:AddButton({ Title = "🌫️ Névoa Densa",   Callback = function()
+    Lighting.ClockTime = 10; Lighting.FogEnd = 80
+    Lighting.FogColor  = Color3.fromRGB(180,180,180); Lighting.Brightness = 1
+end })
 
 T.Wld:AddButton({
     Title = "🔁 Resetar Mundo",
     Callback = function()
-        workspace.Gravity = 196.2
-        Options.Gravity:SetValue(196)
+        workspace.Gravity = 196.2; Options.Gravity:SetValue(196)
         for k, val in pairs(ORIG) do Lighting[k] = val end
         notify("Reset", "Mundo restaurado ao original.")
     end,
@@ -1017,8 +980,7 @@ T.Mis:AddToggle("ClickTP", {
         con("clicktp", UserInput.InputBegan, function(inp)
             if inp.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
             if not (Options.ClickTP and Options.ClickTP.Value) then return end
-            local target = getMouse().Target
-            local root   = getRoot()
+            local target = getMouse().Target; local root = getRoot()
             if not (target and root) then return end
             local char = target:FindFirstAncestorOfClass("Model")
             local plr  = char and Players:GetPlayerFromCharacter(char)
@@ -1041,7 +1003,7 @@ InterfaceManager:SetLibrary(Fluent)
 SaveManager:IgnoreThemeSettings()
 SaveManager:SetIgnoreIndexes({})
 InterfaceManager:SetFolder("FluentHub")
-SaveManager:SetFolder("FluentHub/BrookhavenV5")
+SaveManager:SetFolder("FluentHub/BrookhavenV7")
 InterfaceManager:BuildInterfaceSection(T.Cfg)
 SaveManager:BuildConfigSection(T.Cfg)
 
@@ -1049,7 +1011,7 @@ Window:SelectTab(1)
 SaveManager:LoadAutoloadConfig()
 
 notify(
-    "Brookhaven Admin HD  v5 🔥",
-    ("Carregado com sucesso!\n%d jogadores online  ·  RCtrl = minimizar"):format(#Players:GetPlayers()),
+    "Brookhaven Admin HD  v7 🔥",
+    ("Carregado!\n%d jogadores online  ·  RCtrl = minimizar"):format(#Players:GetPlayers()),
     7
 )
