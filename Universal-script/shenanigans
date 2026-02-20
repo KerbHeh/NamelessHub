@@ -1,151 +1,105 @@
 -- ╔════════════════════════════════════════════════════════════════╗
--- ║ JUJUTSU SHENANIGANS ⛩️ — Eternal Cursed Hub v2.2 (IMPROVED)   ║
--- ║ UI: Fluent-Renewed (forked & updated)                          ║
--- ║ Melhorias: bug fixes, auto farm, teleport, FPS, mais opções    ║
+-- ║ JUJUTSU SHENANIGANS ⛩️ — Eternal Cursed Hub v2.4              ║
+-- ║ UI: Fluent-Renewed                                             ║
 -- ╚════════════════════════════════════════════════════════════════╝
 
--- ╔══════════════════════════════════════╗
--- ║ CARREGAMENTO DA UI                   ║
--- ╚══════════════════════════════════════╝
-local Fluent          = loadstring(game:HttpGet("https://github.com/ActualMasterOogway/Fluent-Renewed/releases/latest/download/Fluent.luau"))()
-local SaveManager     = loadstring(game:HttpGet("https://raw.githubusercontent.com/ActualMasterOogway/Fluent-Renewed/main/Addons/SaveManager.lua"))()
+local Fluent           = loadstring(game:HttpGet("https://github.com/ActualMasterOogway/Fluent-Renewed/releases/latest/download/Fluent.luau"))()
+local SaveManager      = loadstring(game:HttpGet("https://raw.githubusercontent.com/ActualMasterOogway/Fluent-Renewed/main/Addons/SaveManager.lua"))()
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/ActualMasterOogway/Fluent-Renewed/main/Addons/InterfaceManager.lua"))()
 
--- ╔══════════════════════════════════════╗
--- ║ SERVIÇOS                             ║
--- ╚══════════════════════════════════════╝
-local Players          = game:GetService("Players")
-local RunService       = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
+local Players           = game:GetService("Players")
+local RunService        = game:GetService("RunService")
+local UserInputService  = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TeleportService  = game:GetService("TeleportService")
-local Workspace        = game:GetService("Workspace")
-local Lighting         = game:GetService("Lighting")
-local StarterGui       = game:GetService("StarterGui")
-local VirtualUser      = game:GetService("VirtualUser")
-local Camera           = Workspace.CurrentCamera
-local lp               = Players.LocalPlayer
-local Options          = Fluent.Options
+local TeleportService   = game:GetService("TeleportService")
+local Workspace         = game:GetService("Workspace")
+local Lighting          = game:GetService("Lighting")
+local StarterGui        = game:GetService("StarterGui")
+local VirtualUser       = game:GetService("VirtualUser")
+local Camera            = Workspace.CurrentCamera
+local lp                = Players.LocalPlayer
+local Options           = Fluent.Options
 
--- ╔══════════════════════════════════════╗
--- ║ VARIÁVEIS GLOBAIS DE ESTADO          ║
--- ╚══════════════════════════════════════╝
 local char, root, hum
-local charConnections = {} -- conexões do personagem atual para cleanup
+local charConnections = {}
 
--- ╔══════════════════════════════════════╗
--- ║ HELPERS                              ║
--- ╚══════════════════════════════════════╝
+-- ── Helpers ────────────────────────────────────────────────────────
 local function Notify(title, content, duration)
     Fluent:Notify({ Title = title, Content = content, Duration = duration or 4 })
 end
-
 local function SafeCall(fn)
     local ok, err = pcall(fn)
     if not ok then warn("[JJSHub] " .. tostring(err)) end
 end
-
 local function CleanConnections()
-    for _, c in ipairs(charConnections) do
-        if c then pcall(function() c:Disconnect() end) end
-    end
+    for _, c in ipairs(charConnections) do pcall(function() c:Disconnect() end) end
     charConnections = {}
 end
-
 local function FindRemote(name)
-    local searchRoots = {
+    for _, folder in ipairs({
         ReplicatedStorage,
         ReplicatedStorage:FindFirstChild("Remotes"),
         ReplicatedStorage:FindFirstChild("Events"),
         ReplicatedStorage:FindFirstChild("RemoteEvents"),
         ReplicatedStorage:FindFirstChild("RE"),
         ReplicatedStorage:FindFirstChild("Network"),
-    }
-    for _, folder in ipairs(searchRoots) do
+    }) do
         if folder then
             local r = folder:FindFirstChild(name, true)
             if r then return r end
         end
     end
-    return nil
 end
-
 local function FireRemote(name, ...)
     local r = FindRemote(name)
     if r then
-        if r:IsA("RemoteEvent") then
-            SafeCall(function() r:FireServer(...) end)
-        elseif r:IsA("RemoteFunction") then
-            SafeCall(function() r:InvokeServer(...) end)
-        end
+        if r:IsA("RemoteEvent") then SafeCall(function() r:FireServer(...) end)
+        elseif r:IsA("RemoteFunction") then SafeCall(function() r:InvokeServer(...) end) end
         return true
     end
     return false
 end
-
 local function DistTo(obj)
     if not root then return math.huge end
     local pos
-    if obj:IsA("BasePart") then
-        pos = obj.Position
-    elseif obj:IsA("Model") and obj.PrimaryPart then
-        pos = obj.PrimaryPart.Position
-    end
-    if not pos then return math.huge end
-    return (root.Position - pos).Magnitude
+    if obj:IsA("BasePart") then pos = obj.Position
+    elseif obj:IsA("Model") and obj.PrimaryPart then pos = obj.PrimaryPart.Position end
+    return pos and (root.Position - pos).Magnitude or math.huge
 end
-
 local function GetEnemies()
     local list = {}
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= lp and p.Character then
             local ph = p.Character:FindFirstChildOfClass("Humanoid")
-            if ph and ph.Health > 0 then
-                table.insert(list, p)
-            end
+            if ph and ph.Health > 0 then table.insert(list, p) end
         end
     end
     return list
 end
-
 local function GetNearestEnemy()
     local best, bestDist = nil, math.huge
     for _, p in ipairs(GetEnemies()) do
         local d = DistTo(p.Character)
-        if d < bestDist then
-            bestDist = d
-            best = p
-        end
+        if d < bestDist then bestDist = d; best = p end
     end
     return best, bestDist
 end
-
 local function GetLowestHPEnemy()
     local best, bestHP = nil, math.huge
     for _, p in ipairs(GetEnemies()) do
         local ph = p.Character:FindFirstChildOfClass("Humanoid")
-        if ph and ph.Health < bestHP then
-            bestHP = ph.Health
-            best = p
-        end
+        if ph and ph.Health < bestHP then bestHP = ph.Health; best = p end
     end
     return best
 end
-
 local function GetEnergyValue(player)
     local c = player.Character
     if not c then return nil end
-    local candidates = {"Energy","CursedEnergy","CE","Stamina","Mana","Power","Chi"}
-    for _, name in ipairs(candidates) do
+    for _, name in ipairs({"Energy","CursedEnergy","CE","Stamina","Mana","Power","Chi"}) do
         local v = c:FindFirstChild(name, true) or player:FindFirstChild(name, true)
-        if v and (v:IsA("NumberValue") or v:IsA("IntValue")) then
-            return v
-        end
+        if v and (v:IsA("NumberValue") or v:IsA("IntValue")) then return v end
     end
-    return nil
 end
-
--- Simula pressionar uma tecla
 local function SimKey(key)
     local vi = Instance.new("InputObject")
     vi.KeyCode = key
@@ -154,118 +108,48 @@ local function SimKey(key)
 end
 
 -- ╔══════════════════════════════════════╗
--- ║ REFERÊNCIAS DE PERSONAGEM            ║
+-- ║ FLY  (definido ANTES de qualquer ref)║
 -- ╚══════════════════════════════════════╝
-local function RefreshChar()
-    CleanConnections()
-    char = lp.Character or lp.CharacterAdded:Wait()
-    root = char:WaitForChild("HumanoidRootPart", 5)
-    hum  = char:WaitForChild("Humanoid", 5)
+local FlyBV, FlyBG
+
+local function EnableFly()
+    if not root then return end
+    if FlyBV then FlyBV:Destroy() end
+    if FlyBG then FlyBG:Destroy() end
+    FlyBG = Instance.new("BodyGyro", root)
+    FlyBG.MaxTorque = Vector3.new(9e9,9e9,9e9); FlyBG.P = 1e4; FlyBG.CFrame = root.CFrame
+    FlyBV = Instance.new("BodyVelocity", root)
+    FlyBV.MaxForce = Vector3.new(9e9,9e9,9e9); FlyBV.Velocity = Vector3.zero
+    if hum then hum.PlatformStand = true end
+    Notify("Movement", "✈ Fly ATIVADO — WASD + E (subir) / Q (descer)")
 end
-
-RefreshChar()
-
-lp.CharacterAdded:Connect(function()
-    task.wait(1)
-    RefreshChar()
-
-    if hum then
-        if Options.Speed     then hum.WalkSpeed  = Options.Speed.Value end
-        if Options.JumpPower then
-            hum.UseJumpPower = true
-            hum.JumpPower    = Options.JumpPower.Value
-        end
-    end
-
-    -- Re-aplicar toggles persistentes
-    if Options.AntiStun and Options.AntiStun.Value then
-        task.wait(0.3)
-        ApplyAntiStun()
-    end
-    if Options.Fly and Options.Fly.Value then
-        task.wait(0.5)
-        EnableFly()
-    end
-    if Options.PlayerESP and Options.PlayerESP.Value then
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= lp then
-                RemoveESP(p)
-                task.wait(0.05)
-                CreateESP(p)
-            end
-        end
-    end
-end)
+local function DisableFly()
+    if FlyBV then FlyBV:Destroy(); FlyBV = nil end
+    if FlyBG then FlyBG:Destroy(); FlyBG = nil end
+    if hum then hum.PlatformStand = false end
+end
 
 -- ╔══════════════════════════════════════╗
--- ║ ESP SYSTEM                           ║
+-- ║ ANTI-STUN (definido ANTES de qualquer ref) ║
+-- ╚══════════════════════════════════════╝
+local function ApplyAntiStun()
+    if not char then return end
+    SafeCall(function()
+        for _, obj in ipairs(char:GetDescendants()) do
+            if obj:IsA("BallSocketConstraint") or obj:IsA("HingeConstraint") then obj.Enabled = false end
+        end
+        if hum then
+            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll,    false)
+            hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+            hum:SetStateEnabled(Enum.HumanoidStateType.GettingUp,   false)
+        end
+    end)
+end
+
+-- ╔══════════════════════════════════════╗
+-- ║ ESP (definido ANTES de qualquer ref) ║
 -- ╚══════════════════════════════════════╝
 local ESPData = {}
-
-local function CreateESP(player)
-    if ESPData[player] or not player.Character then return end
-
-    local h = Instance.new("Highlight")
-    h.FillColor         = Options.ESPFillColor    and Options.ESPFillColor.Value    or Color3.fromRGB(160, 60, 255)
-    h.OutlineColor      = Options.ESPOutlineColor and Options.ESPOutlineColor.Value or Color3.fromRGB(255, 255, 255)
-    h.FillTransparency  = Options.ESPTransparency and Options.ESPTransparency.Value or 0.5
-    h.OutlineTransparency = 0
-    h.Adornee = player.Character
-    h.Parent  = player.Character
-
-    local pRoot = player.Character:FindFirstChild("HumanoidRootPart")
-    local bb, nameLbl, hpLbl, energyLbl, distLbl
-
-    if pRoot then
-        bb = Instance.new("BillboardGui")
-        bb.Size         = UDim2.new(0, 180, 0, 80)
-        bb.StudsOffset  = Vector3.new(0, 4, 0)
-        bb.AlwaysOnTop  = true
-        bb.Adornee      = pRoot
-        bb.Parent       = pRoot
-
-        local function MakeLabel(parent, size, pos, color, font)
-            local lbl = Instance.new("TextLabel", parent)
-            lbl.Size                 = size
-            lbl.Position             = pos
-            lbl.BackgroundTransparency = 1
-            lbl.TextColor3           = color or Color3.new(1,1,1)
-            lbl.TextStrokeTransparency = 0
-            lbl.Font                 = font or Enum.Font.Gotham
-            lbl.TextScaled           = true
-            return lbl
-        end
-
-        nameLbl   = MakeLabel(bb, UDim2.new(1,0,0.3,0),  UDim2.new(0,0,0,0),     Color3.new(1,1,1),                     Enum.Font.GothamBold)
-        hpLbl     = MakeLabel(bb, UDim2.new(1,0,0.28,0), UDim2.new(0,0,0.3,0),   Color3.fromRGB(100, 255, 100))
-        energyLbl = MakeLabel(bb, UDim2.new(1,0,0.25,0), UDim2.new(0,0,0.58,0),  Color3.fromRGB(100, 180, 255))
-        distLbl   = MakeLabel(bb, UDim2.new(1,0,0.22,0), UDim2.new(0,0,0.82,0),  Color3.fromRGB(255, 220, 80))
-
-        nameLbl.Text   = player.Name
-        hpLbl.Text     = "❤ ?"
-        energyLbl.Text = ""
-        distLbl.Text   = ""
-
-        -- Listener de HP
-        local ph = player.Character:FindFirstChildOfClass("Humanoid")
-        if ph then
-            local function updHP()
-                hpLbl.Text = string.format("❤ %d / %d", math.floor(ph.Health), math.floor(ph.MaxHealth))
-            end
-            updHP()
-            ph:GetPropertyChangedSignal("Health"):Connect(updHP)
-        end
-    end
-
-    ESPData[player] = {
-        highlight = h,
-        billboard = bb,
-        nameLbl   = nameLbl,
-        hpLbl     = hpLbl,
-        energyLbl = energyLbl,
-        distLbl   = distLbl,
-    }
-end
 
 local function RemoveESP(player)
     local data = ESPData[player]
@@ -275,1050 +159,866 @@ local function RemoveESP(player)
     ESPData[player] = nil
 end
 
+local function CreateESP(player)
+    if ESPData[player] or not player.Character then return end
+    local h = Instance.new("Highlight")
+    h.FillColor           = Options.ESPFillColor    and Options.ESPFillColor.Value    or Color3.fromRGB(160,60,255)
+    h.OutlineColor        = Options.ESPOutlineColor and Options.ESPOutlineColor.Value or Color3.fromRGB(255,255,255)
+    h.FillTransparency    = Options.ESPTransparency and Options.ESPTransparency.Value or 0.5
+    h.OutlineTransparency = 0
+    h.Adornee = player.Character; h.Parent = player.Character
+    local pRoot = player.Character:FindFirstChild("HumanoidRootPart")
+    local bb, nameLbl, hpLbl, energyLbl, distLbl
+    if pRoot then
+        bb = Instance.new("BillboardGui")
+        bb.Size = UDim2.new(0,180,0,80); bb.StudsOffset = Vector3.new(0,4,0)
+        bb.AlwaysOnTop = true; bb.Adornee = pRoot; bb.Parent = pRoot
+        local function MakeLabel(parent, size, pos, color, font)
+            local lbl = Instance.new("TextLabel", parent)
+            lbl.Size = size; lbl.Position = pos
+            lbl.BackgroundTransparency = 1
+            lbl.TextColor3 = color or Color3.new(1,1,1)
+            lbl.TextStrokeTransparency = 0
+            lbl.Font = font or Enum.Font.Gotham
+            lbl.TextScaled = true
+            return lbl
+        end
+        nameLbl   = MakeLabel(bb, UDim2.new(1,0,0.3,0),  UDim2.new(0,0,0,0),    Color3.new(1,1,1),             Enum.Font.GothamBold)
+        hpLbl     = MakeLabel(bb, UDim2.new(1,0,0.28,0), UDim2.new(0,0,0.3,0),  Color3.fromRGB(100,255,100))
+        energyLbl = MakeLabel(bb, UDim2.new(1,0,0.25,0), UDim2.new(0,0,0.58,0), Color3.fromRGB(100,180,255))
+        distLbl   = MakeLabel(bb, UDim2.new(1,0,0.22,0), UDim2.new(0,0,0.82,0), Color3.fromRGB(255,220,80))
+        nameLbl.Text = player.Name; hpLbl.Text = "❤ ?"; energyLbl.Text = ""; distLbl.Text = ""
+        local ph = player.Character:FindFirstChildOfClass("Humanoid")
+        if ph then
+            local function updHP()
+                hpLbl.Text = string.format("❤ %d / %d", math.floor(ph.Health), math.floor(ph.MaxHealth))
+            end
+            updHP()
+            ph:GetPropertyChangedSignal("Health"):Connect(updHP)
+        end
+    end
+    ESPData[player] = { highlight=h, billboard=bb, nameLbl=nameLbl, hpLbl=hpLbl, energyLbl=energyLbl, distLbl=distLbl }
+end
+
 local function ClearAllESP()
     for p in pairs(ESPData) do RemoveESP(p) end
 end
+
+-- ╔══════════════════════════════════════╗
+-- ║ CHAR REFRESH                         ║
+-- ╚══════════════════════════════════════╝
+local function RefreshChar()
+    CleanConnections()
+    char = lp.Character or lp.CharacterAdded:Wait()
+    root = char:WaitForChild("HumanoidRootPart", 5)
+    hum  = char:WaitForChild("Humanoid", 5)
+end
+RefreshChar()
+
+lp.CharacterAdded:Connect(function()
+    task.wait(1); RefreshChar()
+    if hum then
+        if Options.Speed     then hum.WalkSpeed = Options.Speed.Value end
+        if Options.JumpPower then hum.UseJumpPower = true; hum.JumpPower = Options.JumpPower.Value end
+    end
+    if Options.AntiStun and Options.AntiStun.Value then task.wait(0.3); ApplyAntiStun() end
+    if Options.Fly and Options.Fly.Value then task.wait(0.5); EnableFly() end
+    if Options.PlayerESP and Options.PlayerESP.Value then
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= lp then RemoveESP(p); task.wait(0.05); CreateESP(p) end
+        end
+    end
+end)
 
 Players.PlayerRemoving:Connect(RemoveESP)
 Players.PlayerAdded:Connect(function(p)
     p.CharacterAdded:Connect(function()
         task.wait(1.5)
-        if Options.PlayerESP and Options.PlayerESP.Value then
-            RemoveESP(p)
-            CreateESP(p)
-        end
+        if Options.PlayerESP and Options.PlayerESP.Value then RemoveESP(p); CreateESP(p) end
     end)
 end)
 
 -- ╔══════════════════════════════════════╗
--- ║ FLY SYSTEM                           ║
--- ╚══════════════════════════════════════╝
-local FlyBV, FlyBG
-
-function EnableFly()
-    if not root then return end
-    if FlyBV then FlyBV:Destroy() end
-    if FlyBG then FlyBG:Destroy() end
-
-    FlyBG             = Instance.new("BodyGyro", root)
-    FlyBG.MaxTorque   = Vector3.new(9e9, 9e9, 9e9)
-    FlyBG.P           = 1e4
-    FlyBG.CFrame      = root.CFrame
-
-    FlyBV             = Instance.new("BodyVelocity", root)
-    FlyBV.MaxForce    = Vector3.new(9e9, 9e9, 9e9)
-    FlyBV.Velocity    = Vector3.zero
-
-    if hum then hum.PlatformStand = true end
-    Notify("Movement", "✈ Fly ATIVADO — WASD + E (subir) / Q (descer)")
-end
-
-local function DisableFly()
-    if FlyBV then FlyBV:Destroy() FlyBV = nil end
-    if FlyBG then FlyBG:Destroy() FlyBG = nil end
-    if hum then hum.PlatformStand = false end
-end
-
--- ╔══════════════════════════════════════╗
--- ║ ANTI-STUN / NO RAGDOLL               ║
--- ╚══════════════════════════════════════╝
-function ApplyAntiStun()
-    if not char then return end
-    SafeCall(function()
-        for _, obj in ipairs(char:GetDescendants()) do
-            if obj:IsA("BallSocketConstraint") or obj:IsA("HingeConstraint") then
-                obj.Enabled = false
-            end
-        end
-        if hum then
-            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll,     false)
-            hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown,  false)
-            hum:SetStateEnabled(Enum.HumanoidStateType.GettingUp,    false)
-        end
-    end)
-end
-
--- ╔══════════════════════════════════════╗
--- ║ CRIAÇÃO DA JANELA                    ║
+-- ║ JANELA                               ║
 -- ╚══════════════════════════════════════╝
 local Window = Fluent:CreateWindow({
-    Title      = "JUJUTSU SHENANIGANS ⛩️",
-    SubTitle   = "Eternal Cursed Hub v2.2",
-    TabWidth   = 165,
-    Size       = UDim2.fromOffset(660, 540),
-    Acrylic    = true,
-    Theme      = "Dark",
-    MinimizeKey = Enum.KeyCode.RightControl,
+    Title = "JUJUTSU SHENANIGANS ⛩️", SubTitle = "Eternal Cursed Hub v2.3",
+    TabWidth = 165, Size = UDim2.fromOffset(660, 540),
+    Acrylic = true, Theme = "Dark", MinimizeKey = Enum.KeyCode.RightControl,
 })
-Window.Visible = true
+-- FIX: Window.Visible = true REMOVIDO (não existe no Fluent, causava erro)
 
 local Tabs = {
-    Combat   = Window:AddTab({ Title = "Combat",     Icon = "swords" }),
-    Skills   = Window:AddTab({ Title = "Techniques", Icon = "zap" }),
-    Movement = Window:AddTab({ Title = "Movement",   Icon = "wind" }),
-    Visuals  = Window:AddTab({ Title = "Visuals",    Icon = "eye" }),
-    Player   = Window:AddTab({ Title = "Player",     Icon = "user" }),
-    Misc     = Window:AddTab({ Title = "Misc",       Icon = "wrench" }),
+    Combat   = Window:AddTab({ Title = "Combat",     Icon = "swords"   }),
+    Skills   = Window:AddTab({ Title = "Techniques", Icon = "zap"      }),
+    Movement = Window:AddTab({ Title = "Movement",   Icon = "wind"     }),
+    Visuals  = Window:AddTab({ Title = "Visuals",    Icon = "eye"      }),
+    Player   = Window:AddTab({ Title = "Player",     Icon = "user"     }),
+    Extra    = Window:AddTab({ Title = "Extra",      Icon = "star"     }),
+    Misc     = Window:AddTab({ Title = "Misc",       Icon = "wrench"   }),
     Settings = Window:AddTab({ Title = "Settings",   Icon = "settings" }),
 }
 
--- ╔══════════════════════════════════════╗
--- ║ ⚔️ ABA 1 — COMBAT                    ║
--- ╚══════════════════════════════════════╝
+-- ── COMBAT ────────────────────────────────────────────────────────
 Tabs.Combat:AddSection("Hitbox Manipulation")
-
-Tabs.Combat:AddToggle("HitboxExp", {
-    Title       = "Hitbox Expander",
-    Description = "Aumenta o HumanoidRootPart dos inimigos para acertar mais fácil",
-    Default     = false,
-})
-
-Tabs.Combat:AddSlider("HitboxSize", {
-    Title       = "Hitbox Size",
-    Description = "Tamanho do hitbox expandido",
-    Min         = 2, Max = 60, Default = 15, Rounding = 0,
-})
-
-Tabs.Combat:AddToggle("HitboxVisible", {
-    Title       = "Mostrar Hitbox (Debug)",
-    Description = "Torna o hitbox expandido semi-transparente para visualizar",
-    Default     = false,
-})
-
+Tabs.Combat:AddToggle("HitboxExp",     { Title = "Hitbox Expander",       Default = false })
+Tabs.Combat:AddSlider("HitboxSize",    { Title = "Hitbox Size",           Min=2, Max=60, Default=15, Rounding=0 })
+Tabs.Combat:AddToggle("HitboxVisible", { Title = "Mostrar Hitbox (Debug)",Default = false })
 Tabs.Combat:AddSection("Kill Aura")
-
-Tabs.Combat:AddToggle("KillAura", {
-    Title       = "Kill Aura (Auto-Attack)",
-    Description = "Ataca automaticamente inimigos dentro do raio",
-    Default     = false,
-})
-
-Tabs.Combat:AddSlider("KillAuraRange", {
-    Title       = "Kill Aura Range",
-    Description = "Distância máxima para atacar",
-    Min         = 5, Max = 150, Default = 30, Rounding = 0,
-})
-
-Tabs.Combat:AddSlider("KillAuraDelay", {
-    Title       = "Kill Aura Delay (ms)",
-    Description = "Intervalo entre cada ataque automático em milissegundos",
-    Min         = 50, Max = 1000, Default = 200, Rounding = 0,
-})
-
-Tabs.Combat:AddDropdown("KillAuraPriority", {
-    Title   = "Alvo Prioritário",
-    Values  = {"Mais Próximo", "Menor HP", "Aleatório"},
-    Multi   = false,
-    Default = 1,
-})
-
-Tabs.Combat:AddToggle("KillAuraTeleport", {
-    Title       = "Teleportar ao Atacar",
-    Description = "Teleporta até o inimigo antes de atacar",
-    Default     = true,
-})
-
+Tabs.Combat:AddToggle("KillAura",         { Title = "Kill Aura (Auto-Attack)", Default = false })
+Tabs.Combat:AddSlider("KillAuraRange",    { Title = "Kill Aura Range",         Min=5, Max=150, Default=30, Rounding=0 })
+Tabs.Combat:AddSlider("KillAuraDelay",    { Title = "Kill Aura Delay (ms)",    Min=50, Max=1000, Default=200, Rounding=0 })
+Tabs.Combat:AddDropdown("KillAuraPriority", { Title="Alvo Prioritário", Values={"Mais Próximo","Menor HP","Aleatório"}, Multi=false, Default=1 })
+Tabs.Combat:AddToggle("KillAuraTeleport", { Title = "Teleportar ao Atacar",    Default = true })
 Tabs.Combat:AddSection("Melee Mods")
+Tabs.Combat:AddToggle("AutoBlock",   { Title = "Auto Block",          Default = false })
+Tabs.Combat:AddToggle("AutoCounter", { Title = "Auto Counter / Parry",Default = false })
+Tabs.Combat:AddToggle("GodMode",     { Title = "God Mode (Imortal)",  Default = false })
+Tabs.Combat:AddToggle("AutoCombo",   { Title = "Auto Combo (M1 Spam)",Default = false })
 
-Tabs.Combat:AddToggle("AutoBlock", {
-    Title       = "Auto Block",
-    Description = "Bloqueia automaticamente ataques recebidos",
-    Default     = false,
-})
-
-Tabs.Combat:AddToggle("AutoCounter", {
-    Title       = "Auto Counter / Parry",
-    Description = "Tenta contrar ataques via remote",
-    Default     = false,
-})
-
-Tabs.Combat:AddToggle("GodMode", {
-    Title       = "God Mode (Imortal)",
-    Description = "HP travado no máximo permanentemente",
-    Default     = false,
-})
-
-Tabs.Combat:AddToggle("AutoCombo", {
-    Title       = "Auto Combo (M1 Spam)",
-    Description = "Executa combo de M1 automaticamente no inimigo mais próximo",
-    Default     = false,
-})
-
--- ╔══════════════════════════════════════╗
--- ║ ✨ ABA 2 — TECHNIQUES / SKILLS       ║
--- ╚══════════════════════════════════════╝
+-- ── TECHNIQUES ────────────────────────────────────────────────────
 Tabs.Skills:AddSection("Cursed Energy")
-
-Tabs.Skills:AddToggle("InfEnergy", {
-    Title       = "Infinite Cursed Energy",
-    Description = "Trava a energia amaldiçoada no máximo constantemente",
-    Default     = false,
-})
-
-Tabs.Skills:AddToggle("NoCooldown", {
-    Title       = "No Cooldown (All Skills)",
-    Description = "Remove cooldown de todas as skills via atributos e remotes",
-    Default     = false,
-})
-
-Tabs.Skills:AddToggle("AutoBlackFlash", {
-    Title       = "Auto Black Flash Chain",
-    Description = "Encadeia Black Flash automaticamente assim que disponível",
-    Default     = false,
-})
-
-Tabs.Skills:AddToggle("AutoSkills", {
-    Title       = "Auto Use Skills (1-4)",
-    Description = "Usa as skills automaticamente quando disponíveis",
-    Default     = false,
-})
-
+Tabs.Skills:AddToggle("InfEnergy",      { Title = "Infinite Cursed Energy",  Default = false })
+Tabs.Skills:AddToggle("NoCooldown",     { Title = "No Cooldown (All Skills)", Default = false })
+Tabs.Skills:AddToggle("AutoBlackFlash", { Title = "Auto Black Flash Chain",   Default = false })
+Tabs.Skills:AddToggle("AutoSkills",     { Title = "Auto Use Skills (1-4)",    Default = false })
 Tabs.Skills:AddSection("Domain Expansion")
-
-Tabs.Skills:AddButton({
-    Title       = "⛩ Domain Expansion",
-    Description = "Ryōiki Tenkai! — Dispara o remote de Domain Expansion",
-    Callback    = function()
-        local domainRemotes = {
-            "DomainExpansion","Domain","RyokiTenkai",
-            "Expand","ExpandDomain","SpecialMove","RyoikiTenkai",
-        }
-        local fired = false
-        for _, name in ipairs(domainRemotes) do
-            if FireRemote(name) then fired = true break end
-        end
-        -- Tenta clicar botão de GUI também
-        local gui = lp:FindFirstChild("PlayerGui")
-        if gui then
-            for _, btn in ipairs(gui:GetDescendants()) do
-                if btn:IsA("TextButton") or btn:IsA("ImageButton") then
-                    local n = btn.Name:lower()
-                    if n:find("domain") or n:find("expand") or n:find("ryoki") then
-                        SafeCall(function() btn.MouseButton1Click:Fire() end)
-                        fired = true
-                    end
-                end
-            end
-        end
-        -- Simula teclas comuns para domain
-        for _, k in ipairs({Enum.KeyCode.G, Enum.KeyCode.H, Enum.KeyCode.B}) do
-            SimKey(k)
-        end
-        Notify("⛩ Domain", fired and "Ryōiki Tenkai! ✅" or "Remote não encontrado — tente via tecla do jogo")
-    end,
-})
-
-Tabs.Skills:AddButton({
-    Title       = "💥 Auto Ultimate Move",
-    Description = "Usa o ultimate/special disponível imediatamente",
-    Callback    = function()
-        local ultRemotes = {"Ultimate","UltimateMove","Special","SpecialAttack","Super","Finisher","Ult"}
-        for _, name in ipairs(ultRemotes) do FireRemote(name) end
-        for _, key in ipairs({Enum.KeyCode.G, Enum.KeyCode.R, Enum.KeyCode.V, Enum.KeyCode.F, Enum.KeyCode.T}) do
-            SimKey(key)
-        end
-        Notify("💥 Ultimate", "Ultimate disparado!")
-    end,
-})
-
+Tabs.Skills:AddButton({ Title = "⛩ Domain Expansion", Callback = function()
+    local fired = false
+    for _, name in ipairs({"DomainExpansion","Domain","RyokiTenkai","Expand","ExpandDomain","RyoikiTenkai"}) do
+        if FireRemote(name) then fired = true; break end
+    end
+    for _, k in ipairs({Enum.KeyCode.G, Enum.KeyCode.H, Enum.KeyCode.B}) do SimKey(k) end
+    Notify("⛩ Domain", fired and "Ryōiki Tenkai! ✅" or "Remote não encontrado — tente via tecla")
+end })
+Tabs.Skills:AddButton({ Title = "💥 Auto Ultimate Move", Callback = function()
+    for _, name in ipairs({"Ultimate","UltimateMove","Special","SpecialAttack","Super","Finisher","Ult"}) do FireRemote(name) end
+    for _, key in ipairs({Enum.KeyCode.G, Enum.KeyCode.R, Enum.KeyCode.V, Enum.KeyCode.F, Enum.KeyCode.T}) do SimKey(key) end
+    Notify("💥 Ultimate", "Ultimate disparado!")
+end })
 Tabs.Skills:AddSection("Skill Keybinds")
+Tabs.Skills:AddButton({ Title = "🌀 Skill 1 (Q/Z)", Callback = function()
+    for _, k in ipairs({Enum.KeyCode.Q, Enum.KeyCode.Z}) do SimKey(k) end
+    FireRemote("Skill1"); FireRemote("UseSkill", 1)
+end })
+Tabs.Skills:AddButton({ Title = "⚡ Skill 2 (E/X)", Callback = function()
+    for _, k in ipairs({Enum.KeyCode.E, Enum.KeyCode.X}) do SimKey(k) end
+    FireRemote("Skill2"); FireRemote("UseSkill", 2)
+end })
+Tabs.Skills:AddButton({ Title = "🔥 Skill 3 (R/C)", Callback = function()
+    for _, k in ipairs({Enum.KeyCode.R, Enum.KeyCode.C}) do SimKey(k) end
+    FireRemote("Skill3"); FireRemote("UseSkill", 3)
+end })
+Tabs.Skills:AddButton({ Title = "💫 Skill 4 (T/V)", Callback = function()
+    for _, k in ipairs({Enum.KeyCode.T, Enum.KeyCode.V}) do SimKey(k) end
+    FireRemote("Skill4"); FireRemote("UseSkill", 4)
+end })
 
-Tabs.Skills:AddButton({
-    Title    = "🌀 Skill 1 (Q / Z)",
-    Callback = function()
-        for _, k in ipairs({Enum.KeyCode.Q, Enum.KeyCode.Z}) do SimKey(k) end
-        FireRemote("Skill1"); FireRemote("UseSkill", 1)
-    end,
-})
-
-Tabs.Skills:AddButton({
-    Title    = "⚡ Skill 2 (E / X)",
-    Callback = function()
-        for _, k in ipairs({Enum.KeyCode.E, Enum.KeyCode.X}) do SimKey(k) end
-        FireRemote("Skill2"); FireRemote("UseSkill", 2)
-    end,
-})
-
-Tabs.Skills:AddButton({
-    Title    = "🔥 Skill 3 (R / C)",
-    Callback = function()
-        for _, k in ipairs({Enum.KeyCode.R, Enum.KeyCode.C}) do SimKey(k) end
-        FireRemote("Skill3"); FireRemote("UseSkill", 3)
-    end,
-})
-
-Tabs.Skills:AddButton({
-    Title    = "💫 Skill 4 (T / V)",
-    Callback = function()
-        for _, k in ipairs({Enum.KeyCode.T, Enum.KeyCode.V}) do SimKey(k) end
-        FireRemote("Skill4"); FireRemote("UseSkill", 4)
-    end,
-})
-
--- ╔══════════════════════════════════════╗
--- ║ 🏃 ABA 3 — MOVEMENT                  ║
--- ╚══════════════════════════════════════╝
+-- ── MOVEMENT ──────────────────────────────────────────────────────
 Tabs.Movement:AddSection("Speed & Jump")
-
-Tabs.Movement:AddSlider("Speed", {
-    Title       = "Flash Step Speed",
-    Description = "Velocidade de movimento do sorcerer",
-    Min = 0, Max = 350, Default = 16, Rounding = 0,
-    Callback = function(v)
-        if hum then hum.WalkSpeed = v end
-    end,
-})
-
-Tabs.Movement:AddSlider("JumpPower", {
-    Title       = "Jump Power",
-    Description = "Altura do salto",
-    Min = 0, Max = 400, Default = 50, Rounding = 0,
-    Callback = function(v)
-        if hum then
-            hum.UseJumpPower = true
-            hum.JumpPower = v
-        end
-    end,
-})
-
-Tabs.Movement:AddToggle("InfiniteJump", {
-    Title       = "Infinite Jump",
-    Description = "Salta infinitamente no ar",
-    Default     = false,
-})
-
-Tabs.Movement:AddToggle("InfDash", {
-    Title       = "Infinite Dash / Stamina",
-    Description = "Stamina e dash sem cooldown",
-    Default     = false,
-})
-
+Tabs.Movement:AddSlider("Speed", { Title="Flash Step Speed", Min=0, Max=350, Default=16, Rounding=0,
+    Callback = function(v) if hum then hum.WalkSpeed = v end end })
+Tabs.Movement:AddSlider("JumpPower", { Title="Jump Power", Min=0, Max=400, Default=50, Rounding=0,
+    Callback = function(v) if hum then hum.UseJumpPower = true; hum.JumpPower = v end end })
+Tabs.Movement:AddToggle("InfiniteJump", { Title = "Infinite Jump",          Default = false })
+Tabs.Movement:AddToggle("InfDash",      { Title = "Infinite Dash / Stamina",Default = false })
 Tabs.Movement:AddSection("Teleport")
-
-Tabs.Movement:AddDropdown("TeleportTarget", {
-    Title       = "Teleportar até Jogador",
-    Description = "Escolha um jogador para teleportar instantaneamente",
-    Values      = {"(nenhum)"},
-    Multi       = false,
-    Default     = 1,
-})
-
-Tabs.Movement:AddButton({
-    Title       = "🚀 Teleportar ao Jogador Selecionado",
-    Description = "Teleporta imediatamente até o jogador escolhido acima",
-    Callback    = function()
-        local sel = Options.TeleportTarget and Options.TeleportTarget.Value
-        if not sel or sel == "(nenhum)" then
-            Notify("Teleport", "Selecione um jogador primeiro!")
-            return
-        end
-        local target = Players:FindFirstChild(sel)
-        if target and target.Character and root then
-            local tRoot = target.Character:FindFirstChild("HumanoidRootPart")
-            if tRoot then
-                root.CFrame = tRoot.CFrame + Vector3.new(0, 0, 3)
-                Notify("Teleport", "Teleportado até " .. sel .. "!")
-            end
-        else
-            Notify("Teleport", "Jogador não encontrado ou sem personagem.")
-        end
-    end,
-})
-
--- Atualiza lista de jogadores no dropdown ao abrir a aba
+Tabs.Movement:AddDropdown("TeleportTarget", { Title="Teleportar até Jogador", Values={"(nenhum)"}, Multi=false, Default=1 })
+Tabs.Movement:AddButton({ Title = "🚀 Teleportar ao Jogador Selecionado", Callback = function()
+    local sel = Options.TeleportTarget and Options.TeleportTarget.Value
+    if not sel or sel == "(nenhum)" then Notify("Teleport","Selecione um jogador!"); return end
+    local target = Players:FindFirstChild(sel)
+    if target and target.Character and root then
+        local tRoot = target.Character:FindFirstChild("HumanoidRootPart")
+        if tRoot then root.CFrame = tRoot.CFrame + Vector3.new(0,0,3); Notify("Teleport","Teleportado até "..sel.."!") end
+    else Notify("Teleport","Jogador não encontrado.") end
+end })
 do
     local function RefreshPlayerList()
         if not Options.TeleportTarget then return end
         local names = {"(nenhum)"}
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= lp then table.insert(names, p.Name) end
-        end
-        -- Fluent não tem método Update em todos os forks — tenta silenciosamente
+        for _, p in ipairs(Players:GetPlayers()) do if p ~= lp then table.insert(names, p.Name) end end
         SafeCall(function() Options.TeleportTarget:SetValues(names) end)
     end
     Players.PlayerAdded:Connect(RefreshPlayerList)
     Players.PlayerRemoving:Connect(RefreshPlayerList)
 end
-
 Tabs.Movement:AddSection("Fly Mode")
-
-Tabs.Movement:AddToggle("Fly", {
-    Title       = "Fly (Levitação)",
-    Description = "Flutua como um sorcerer de alto escalão. WASD + E/Q",
-    Default     = false,
-})
-
-Options.Fly:OnChanged(function()
-    if Options.Fly.Value then EnableFly() else DisableFly() end
-end)
-
-Tabs.Movement:AddSlider("FlySpeed", {
-    Title   = "Fly Speed",
-    Min = 10, Max = 600, Default = 90, Rounding = 0,
-})
-
+-- FIX: salva referência do toggle para usar :OnChanged corretamente
+local FlyToggle = Tabs.Movement:AddToggle("Fly", { Title="Fly (Levitação)", Description="WASD + E (subir) / Q (descer)", Default=false })
+FlyToggle:OnChanged(function(val) if val then EnableFly() else DisableFly() end end)
+Tabs.Movement:AddSlider("FlySpeed", { Title="Fly Speed", Min=10, Max=600, Default=90, Rounding=0 })
 Tabs.Movement:AddSection("Defense & Utility")
+-- FIX: salva referência do toggle para usar :OnChanged corretamente
+local AntiStunToggle = Tabs.Movement:AddToggle("AntiStun", { Title="Anti-Stun / No Ragdoll", Default=false })
+AntiStunToggle:OnChanged(function(val) if val then ApplyAntiStun() end end)
+Tabs.Movement:AddToggle("Noclip",   { Title = "Noclip",    Default = false })
+Tabs.Movement:AddToggle("AntiVoid", { Title = "Anti Void", Default = false })
 
-Tabs.Movement:AddToggle("AntiStun", {
-    Title       = "Anti-Stun / No Ragdoll",
-    Description = "Previne ragdoll e stun de ataques inimigos",
-    Default     = false,
-})
-
-Options.AntiStun:OnChanged(function()
-    if Options.AntiStun.Value then ApplyAntiStun() end
-end)
-
-Tabs.Movement:AddToggle("Noclip", {
-    Title       = "Noclip",
-    Description = "Atravessa paredes (útil para explorar domínios)",
-    Default     = false,
-})
-
-Tabs.Movement:AddToggle("AntiVoid", {
-    Title       = "Anti Void",
-    Description = "Teleporta de volta ao mapa se cair no void",
-    Default     = false,
-})
-
--- ╔══════════════════════════════════════╗
--- ║ 👁️ ABA 4 — VISUALS                   ║
--- ╚══════════════════════════════════════╝
+-- ── VISUALS ───────────────────────────────────────────────────────
 Tabs.Visuals:AddSection("Player ESP")
-
-Tabs.Visuals:AddToggle("PlayerESP", {
-    Title       = "Player ESP (Wallhack)",
-    Description = "Destaca todos os players com highlight",
-    Default     = false,
-})
-
-Options.PlayerESP:OnChanged(function()
-    if Options.PlayerESP.Value then
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= lp then CreateESP(p) end
-        end
-        Notify("Visuals", "ESP Ativado ✅")
-    else
-        ClearAllESP()
-        Notify("Visuals", "ESP Desativado ❌")
-    end
+-- FIX: salva referência do toggle
+local ESPToggle = Tabs.Visuals:AddToggle("PlayerESP", { Title="Player ESP (Wallhack)", Default=false })
+ESPToggle:OnChanged(function(val)
+    if val then
+        for _, p in ipairs(Players:GetPlayers()) do if p ~= lp then CreateESP(p) end end
+        Notify("Visuals","ESP Ativado ✅")
+    else ClearAllESP(); Notify("Visuals","ESP Desativado ❌") end
 end)
-
-Tabs.Visuals:AddToggle("EnergyBarESP", {
-    Title       = "Mostrar Energia no ESP",
-    Description = "Exibe a energia amaldiçoada no nametag do inimigo",
-    Default     = false,
-})
-
-Tabs.Visuals:AddToggle("DistanceESP", {
-    Title       = "Mostrar Distância no ESP",
-    Description = "Exibe a distância em metros no nametag",
-    Default     = true,
-})
-
-Tabs.Visuals:AddColorpicker("ESPFillColor", {
-    Title   = "ESP Fill Color",
-    Default = Color3.fromRGB(160, 60, 255),
-})
-
-Tabs.Visuals:AddColorpicker("ESPOutlineColor", {
-    Title   = "ESP Outline Color",
-    Default = Color3.fromRGB(255, 255, 255),
-})
-
-Tabs.Visuals:AddSlider("ESPTransparency", {
-    Title   = "ESP Fill Transparency",
-    Min = 0, Max = 1, Default = 0.5, Rounding = 2,
-})
-
+Tabs.Visuals:AddToggle("EnergyBarESP", { Title="Mostrar Energia no ESP",   Default=false })
+Tabs.Visuals:AddToggle("DistanceESP",  { Title="Mostrar Distância no ESP", Default=true  })
+Tabs.Visuals:AddColorpicker("ESPFillColor",    { Title="ESP Fill Color",    Default=Color3.fromRGB(160,60,255)  })
+Tabs.Visuals:AddColorpicker("ESPOutlineColor", { Title="ESP Outline Color", Default=Color3.fromRGB(255,255,255) })
+Tabs.Visuals:AddSlider("ESPTransparency", { Title="ESP Fill Transparency", Min=0, Max=1, Default=0.5, Rounding=2 })
 Tabs.Visuals:AddSection("World")
+Tabs.Visuals:AddToggle("Fullbright", { Title="Fullbright / No Fog",     Default=false })
+Tabs.Visuals:AddToggle("NoEffects",  { Title="Remove Screen Effects",   Default=false })
+-- FIX: salva referência
+local CustomFOVToggle = Tabs.Visuals:AddToggle("CustomFOV", { Title="Custom FOV", Default=false })
+Tabs.Visuals:AddSlider("FOVValue", { Title="FOV", Min=50, Max=130, Default=90, Rounding=0,
+    Callback = function(v) if Options.CustomFOV and Options.CustomFOV.Value then Camera.FieldOfView = v end end })
+CustomFOVToggle:OnChanged(function(val) if not val then Camera.FieldOfView = 70 end end)
 
-Tabs.Visuals:AddToggle("Fullbright", {
-    Title       = "Fullbright / No Fog",
-    Description = "Visibilidade total, sem sombras ou névoa",
-    Default     = false,
-})
-
-Tabs.Visuals:AddToggle("NoEffects", {
-    Title       = "Remove Screen Effects",
-    Description = "Remove blur, bloom e outros efeitos de pós-processamento",
-    Default     = false,
-})
-
-Tabs.Visuals:AddToggle("CustomFOV", {
-    Title       = "Custom FOV",
-    Description = "Muda o campo de visão da câmera",
-    Default     = false,
-})
-
-Tabs.Visuals:AddSlider("FOVValue", {
-    Title   = "FOV",
-    Min = 50, Max = 130, Default = 90, Rounding = 0,
-    Callback = function(v)
-        if Options.CustomFOV and Options.CustomFOV.Value then
-            Camera.FieldOfView = v
-        end
-    end,
-})
-
-Options.CustomFOV:OnChanged(function()
-    if not Options.CustomFOV.Value then
-        Camera.FieldOfView = 70 -- padrão Roblox
+-- ── PLAYER ────────────────────────────────────────────────────────
+Tabs.Player:AddSection("Debug")
+Tabs.Player:AddButton({ Title="📋 Listar Remotes do Jogo", Callback = function()
+    local count = 0
+    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then print("[JJSHub Remote] "..obj:GetFullName()); count+=1 end
     end
-end)
-
--- ╔══════════════════════════════════════╗
--- ║ 👤 ABA 5 — PLAYER                    ║
--- ╚══════════════════════════════════════╝
-Tabs.Player:AddSection("Character Info")
-
-Tabs.Player:AddButton({
-    Title       = "📋 Listar Remotes do Jogo",
-    Description = "Imprime todos os RemoteEvents/Functions no output (F9)",
-    Callback    = function()
-        local count = 0
-        for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
-            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-                print("[JJSHub Remote] " .. obj:GetFullName())
-                count += 1
-            end
-        end
-        Notify("Debug", count .. " remotes listados no output (F9)")
-    end,
-})
-
-Tabs.Player:AddButton({
-    Title       = "🔍 Listar Atributos do Personagem",
-    Description = "Mostra atributos do char no output para encontrar nomes corretos",
-    Callback    = function()
-        if not char then Notify("Debug", "Sem personagem!") return end
-        local attrs = char:GetAttributes()
-        local count = 0
-        for name, value in pairs(attrs) do
-            print(string.format("[Attr] %s = %s", name, tostring(value)))
-            count += 1
-        end
-        -- Também lista NumberValues
-        for _, obj in ipairs(char:GetDescendants()) do
-            if obj:IsA("NumberValue") or obj:IsA("IntValue") then
-                print(string.format("[Value] %s = %s", obj:GetFullName(), tostring(obj.Value)))
-                count += 1
-            end
-        end
-        Notify("Debug", count .. " atributos/values listados no output (F9)")
-    end,
-})
-
+    Notify("Debug", count.." remotes no output (F9)")
+end })
+Tabs.Player:AddButton({ Title="🔍 Listar Atributos do Personagem", Callback = function()
+    if not char then Notify("Debug","Sem personagem!"); return end
+    local count = 0
+    for name, value in pairs(char:GetAttributes()) do print(string.format("[Attr] %s = %s", name, tostring(value))); count+=1 end
+    for _, obj in ipairs(char:GetDescendants()) do
+        if obj:IsA("NumberValue") or obj:IsA("IntValue") then print(string.format("[Value] %s = %s", obj:GetFullName(), tostring(obj.Value))); count+=1 end
+    end
+    Notify("Debug", count.." atributos no output (F9)")
+end })
 Tabs.Player:AddSection("Auto Farm")
-
-Tabs.Player:AddToggle("AutoFarm", {
-    Title       = "Auto Farm (Kill Loop)",
-    Description = "Mata o inimigo mais próximo em loop para farmar XP/recompensas",
-    Default     = false,
-})
-
-Tabs.Player:AddSlider("AutoFarmRange", {
-    Title       = "Auto Farm Range",
-    Min = 10, Max = 200, Default = 50, Rounding = 0,
-})
-
-Tabs.Player:AddSection("FPS & Performance")
-
-Tabs.Player:AddToggle("FPSUnlocker", {
-    Title       = "FPS Unlocker (setfpscap)",
-    Description = "Remove o limite de 60 FPS via setfpscap",
-    Default     = false,
-})
-
-Options.FPSUnlocker:OnChanged(function()
-    if Options.FPSUnlocker.Value then
-        SafeCall(function()
-            if setfpscap then setfpscap(0) end -- desbloqueado
-        end)
-        Notify("Performance", "FPS Unlocked! ✅ (se o executor suportar)")
-    else
-        SafeCall(function()
-            if setfpscap then setfpscap(60) end
-        end)
-    end
+Tabs.Player:AddToggle("AutoFarm",      { Title="Auto Farm (Kill Loop)", Default=false })
+Tabs.Player:AddSlider("AutoFarmRange", { Title="Auto Farm Range", Min=10, Max=200, Default=50, Rounding=0 })
+Tabs.Player:AddSection("FPS")
+local FPSToggle = Tabs.Player:AddToggle("FPSUnlocker", { Title="FPS Unlocker", Default=false })
+FPSToggle:OnChanged(function(val)
+    SafeCall(function() if setfpscap then setfpscap(val and 0 or 60) end end)
+    if val then Notify("Performance","FPS Unlocked! ✅") end
 end)
-
-Tabs.Player:AddSlider("FPSCap", {
-    Title       = "FPS Cap personalizado",
-    Description = "Define um cap específico de FPS (requer FPS Unlocker ON)",
-    Min = 30, Max = 360, Default = 144, Rounding = 0,
+Tabs.Player:AddSlider("FPSCap", { Title="FPS Cap personalizado", Min=30, Max=360, Default=144, Rounding=0,
     Callback = function(v)
-        if Options.FPSUnlocker and Options.FPSUnlocker.Value then
-            SafeCall(function() if setfpscap then setfpscap(v) end end)
-        end
-    end,
-})
+        if Options.FPSUnlocker and Options.FPSUnlocker.Value then SafeCall(function() if setfpscap then setfpscap(v) end end) end
+    end })
 
--- ╔══════════════════════════════════════╗
--- ║ 🔧 ABA 6 — MISC                      ║
--- ╚══════════════════════════════════════╝
+-- ── MISC ──────────────────────────────────────────────────────────
 Tabs.Misc:AddSection("Server")
-
-Tabs.Misc:AddButton({
-    Title       = "🔁 Server Hop",
-    Description = "Entra em outro servidor menos populado",
-    Callback    = function()
-        Notify("Misc", "Trocando servidor...")
-        task.wait(0.5)
-        SafeCall(function() TeleportService:Teleport(game.PlaceId, lp) end)
-    end,
-})
-
-Tabs.Misc:AddButton({
-    Title       = "🔌 Rejoin",
-    Description = "Reconecta no mesmo servidor",
-    Callback    = function()
-        Notify("Misc", "Reconectando...")
-        task.wait(0.5)
-        SafeCall(function()
-            TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, lp)
-        end)
-    end,
-})
-
+Tabs.Misc:AddButton({ Title="🔁 Server Hop", Callback = function()
+    Notify("Misc","Trocando servidor..."); task.wait(0.5)
+    SafeCall(function() TeleportService:Teleport(game.PlaceId, lp) end)
+end })
+Tabs.Misc:AddButton({ Title="🔌 Rejoin", Callback = function()
+    Notify("Misc","Reconectando..."); task.wait(0.5)
+    SafeCall(function() TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, lp) end)
+end })
 Tabs.Misc:AddSection("Player Utilities")
-
-Tabs.Misc:AddToggle("AutoRespawn", {
-    Title       = "Auto Respawn",
-    Description = "Respawna automaticamente ao morrer",
-    Default     = false,
-})
-
-Tabs.Misc:AddButton({
-    Title       = "🤖 Ativar Anti-AFK",
-    Description = "Previne kick por inatividade (permanente até fechar o hub)",
-    Callback    = function()
-        lp.Idled:Connect(function()
-            VirtualUser:Button2Down(Vector2.new(0, 0), Camera.CFrame)
-            task.wait(1)
-            VirtualUser:Button2Up(Vector2.new(0, 0), Camera.CFrame)
-        end)
-        Notify("Misc", "Anti-AFK ativado! ✅")
-    end,
-})
-
-Tabs.Misc:AddButton({
-    Title       = "💀 Kill Self (Respawn rápido)",
-    Description = "Mata o personagem para respawnar imediatamente",
-    Callback    = function()
-        if hum then hum.Health = 0 end
-        Notify("Misc", "Respawnando...")
-    end,
-})
-
-Tabs.Misc:AddButton({
-    Title       = "🔔 Reset Notifications",
-    Description = "Limpa notificações pendentes da UI",
-    Callback    = function()
-        StarterGui:SetCore("ResetButtonCallback", true)
-        Notify("Misc", "Notificações limpas ✅")
-    end,
-})
+Tabs.Misc:AddToggle("AutoRespawn", { Title="Auto Respawn", Default=false })
+Tabs.Misc:AddButton({ Title="🤖 Ativar Anti-AFK", Callback = function()
+    lp.Idled:Connect(function()
+        VirtualUser:Button2Down(Vector2.new(0,0), Camera.CFrame); task.wait(1)
+        VirtualUser:Button2Up(Vector2.new(0,0), Camera.CFrame)
+    end)
+    Notify("Misc","Anti-AFK ativado! ✅")
+end })
+Tabs.Misc:AddButton({ Title="💀 Kill Self (Respawn rápido)", Callback = function()
+    if hum then hum.Health = 0 end; Notify("Misc","Respawnando...")
+end })
 
 -- ╔══════════════════════════════════════╗
--- ║ RUNTIME LOOP (Heartbeat)             ║
+-- ║ RUNTIME LOOP                         ║
 -- ╚══════════════════════════════════════╝
-local tickers = {
-    combat   = 0,
-    killAura = 0,
-    skills   = 0,
-    energy   = 0,
-    espUpd   = 0,
-    cooldown = 0,
-    auto     = 0,
-    farm     = 0,
-    combo    = 0,
-}
+local tickers = { combat=0, killAura=0, energy=0, espUpd=0, cooldown=0, farm=0, combo=0 }
 
 RunService.Heartbeat:Connect(function(dt)
     local ok = root and hum and char
 
-    -- ── Speed / Jump lock ──────────────────────────────────────────
     if ok then
-        if Options.Speed and hum.WalkSpeed ~= Options.Speed.Value then
-            SafeCall(function() hum.WalkSpeed = Options.Speed.Value end)
-        end
-        if Options.JumpPower and Options.JumpPower.Value ~= 50 then
-            SafeCall(function()
-                hum.UseJumpPower = true
-                hum.JumpPower = Options.JumpPower.Value
-            end)
-        end
+        if Options.Speed and hum.WalkSpeed ~= Options.Speed.Value then SafeCall(function() hum.WalkSpeed = Options.Speed.Value end) end
+        if Options.JumpPower and Options.JumpPower.Value ~= 50 then SafeCall(function() hum.UseJumpPower=true; hum.JumpPower=Options.JumpPower.Value end) end
     end
-
-    -- ── God Mode ───────────────────────────────────────────────────
     if ok and Options.GodMode and Options.GodMode.Value then
-        SafeCall(function()
-            if hum.MaxHealth ~= math.huge then hum.MaxHealth = math.huge end
-            if hum.Health < 1e10 then hum.Health = math.huge end
-        end)
+        SafeCall(function() if hum.MaxHealth~=math.huge then hum.MaxHealth=math.huge end; if hum.Health<1e10 then hum.Health=math.huge end end)
     end
-
-    -- ── Noclip ─────────────────────────────────────────────────────
     if ok and Options.Noclip and Options.Noclip.Value then
-        SafeCall(function()
-            for _, p in ipairs(char:GetDescendants()) do
-                if p:IsA("BasePart") then p.CanCollide = false end
-            end
-        end)
+        SafeCall(function() for _,p in ipairs(char:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide=false end end end)
     end
-
-    -- ── Anti Void ──────────────────────────────────────────────────
     if ok and Options.AntiVoid and Options.AntiVoid.Value then
-        if root.Position.Y < -80 then
-            SafeCall(function()
-                root.CFrame = CFrame.new(root.Position.X, 50, root.Position.Z)
-            end)
-        end
+        if root.Position.Y < -80 then SafeCall(function() root.CFrame=CFrame.new(root.Position.X,50,root.Position.Z) end) end
     end
-
-    -- ── FOV ────────────────────────────────────────────────────────
-    if Options.CustomFOV and Options.CustomFOV.Value and Options.FOVValue then
-        Camera.FieldOfView = Options.FOVValue.Value
-    end
-
-    -- ── Fly movement ───────────────────────────────────────────────
+    if Options.CustomFOV and Options.CustomFOV.Value and Options.FOVValue then Camera.FieldOfView = Options.FOVValue.Value end
     if Options.Fly and Options.Fly.Value and FlyBV and FlyBG and root then
-        local vel = Vector3.zero
-        local spd = Options.FlySpeed and Options.FlySpeed.Value or 90
-        local cf  = Camera.CFrame
-
-        if UserInputService:IsKeyDown(Enum.KeyCode.W) then vel = vel + cf.LookVector  end
-        if UserInputService:IsKeyDown(Enum.KeyCode.S) then vel = vel - cf.LookVector  end
-        if UserInputService:IsKeyDown(Enum.KeyCode.A) then vel = vel - cf.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.D) then vel = vel + cf.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.E) then vel = vel + Vector3.yAxis  end
-        if UserInputService:IsKeyDown(Enum.KeyCode.Q) then vel = vel - Vector3.yAxis  end
-
-        FlyBV.Velocity = vel * spd
-        FlyBG.CFrame   = cf
+        local vel=Vector3.zero; local spd=Options.FlySpeed and Options.FlySpeed.Value or 90; local cf=Camera.CFrame
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then vel=vel+cf.LookVector  end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then vel=vel-cf.LookVector  end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then vel=vel-cf.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then vel=vel+cf.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.E) then vel=vel+Vector3.yAxis  end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Q) then vel=vel-Vector3.yAxis  end
+        FlyBV.Velocity=vel*spd; FlyBG.CFrame=cf
     end
-
-    -- ── Fullbright ─────────────────────────────────────────────────
     if Options.Fullbright and Options.Fullbright.Value then
-        SafeCall(function()
-            Lighting.Brightness    = 10
-            Lighting.ClockTime     = 14
-            Lighting.FogEnd        = 100000
-            Lighting.FogStart      = 99999
-            Lighting.GlobalShadows = false
-            Lighting.Ambient       = Color3.fromRGB(178, 178, 178)
-        end)
+        SafeCall(function() Lighting.Brightness=10; Lighting.ClockTime=14; Lighting.FogEnd=100000; Lighting.FogStart=99999; Lighting.GlobalShadows=false; Lighting.Ambient=Color3.fromRGB(178,178,178) end)
     end
-
-    -- ── Remove Screen Effects ──────────────────────────────────────
     if Options.NoEffects and Options.NoEffects.Value then
         SafeCall(function()
             for _, fx in ipairs(Lighting:GetChildren()) do
-                if fx:IsA("BlurEffect") or fx:IsA("BloomEffect")
-                or fx:IsA("ColorCorrectionEffect") or fx:IsA("DepthOfFieldEffect")
-                or fx:IsA("SunRaysEffect") then
-                    fx.Enabled = false
-                end
+                if fx:IsA("BlurEffect") or fx:IsA("BloomEffect") or fx:IsA("ColorCorrectionEffect") or fx:IsA("DepthOfFieldEffect") or fx:IsA("SunRaysEffect") then fx.Enabled=false end
             end
         end)
     end
-
-    -- ── Auto Respawn ───────────────────────────────────────────────
     if Options.AutoRespawn and Options.AutoRespawn.Value then
-        if hum and hum.Health <= 0 then
-            SafeCall(function() lp:LoadCharacter() end)
-        end
+        if hum and hum.Health <= 0 then SafeCall(function() lp:LoadCharacter() end) end
     end
 
-    -- ─────────────────────────────────────────────────────────────
-    -- HITBOX EXPANDER (0.3s)
+    -- Hitbox (0.3s)
     tickers.combat += dt
-    if tickers.combat >= 0.3 then
-        tickers.combat = 0
+    if tickers.combat >= 0.3 then tickers.combat = 0
         if Options.HitboxExp and Options.HitboxExp.Value then
             local size = Options.HitboxSize and Options.HitboxSize.Value or 15
             SafeCall(function()
                 for _, p in ipairs(Players:GetPlayers()) do
                     if p ~= lp and p.Character then
                         local pRoot = p.Character:FindFirstChild("HumanoidRootPart")
-                        if pRoot then
-                            pRoot.Size        = Vector3.new(size, size, size)
-                            pRoot.CanCollide  = false
-                            pRoot.Transparency = (Options.HitboxVisible and Options.HitboxVisible.Value) and 0.6 or 1
-                        end
+                        if pRoot then pRoot.Size=Vector3.new(size,size,size); pRoot.CanCollide=false; pRoot.Transparency=(Options.HitboxVisible and Options.HitboxVisible.Value) and 0.6 or 1 end
                     end
                 end
             end)
         end
     end
 
-    -- ─────────────────────────────────────────────────────────────
-    -- KILL AURA (delay configurável)
-    local kaDelay = ((Options.KillAuraDelay and Options.KillAuraDelay.Value) or 200) / 1000
+    -- Kill Aura
+    local kaDelay = ((Options.KillAuraDelay and Options.KillAuraDelay.Value) or 200)/1000
     tickers.killAura += dt
-    if tickers.killAura >= kaDelay then
-        tickers.killAura = 0
-
+    if tickers.killAura >= kaDelay then tickers.killAura = 0
         if ok and Options.KillAura and Options.KillAura.Value then
-            local range    = Options.KillAuraRange and Options.KillAuraRange.Value or 30
+            local range = Options.KillAuraRange and Options.KillAuraRange.Value or 30
             local priority = Options.KillAuraPriority and Options.KillAuraPriority.Value or "Mais Próximo"
             local target
-
-            if priority == "Menor HP" then
-                target = GetLowestHPEnemy()
-            elseif priority == "Aleatório" then
-                local enemies = GetEnemies()
-                if #enemies > 0 then target = enemies[math.random(1, #enemies)] end
-            else
-                target = GetNearestEnemy()
-            end
-
+            if priority == "Menor HP" then target = GetLowestHPEnemy()
+            elseif priority == "Aleatório" then local e=GetEnemies(); if #e>0 then target=e[math.random(1,#e)] end
+            else target = GetNearestEnemy() end
             if target and target.Character then
                 local tRoot = target.Character:FindFirstChild("HumanoidRootPart")
-                if tRoot then
-                    local dist = (root.Position - tRoot.Position).Magnitude
-                    if dist <= range then
-                        -- Teleporta atrás do inimigo se habilitado
-                        if Options.KillAuraTeleport and Options.KillAuraTeleport.Value then
-                            root.CFrame = CFrame.new(tRoot.Position, root.Position)
-                                        * CFrame.new(0, 0, 2.5)
-                        end
-                        -- Dispara remotes de ataque
-                        FireRemote("M1");      FireRemote("Attack", target)
-                        FireRemote("Hit",target); FireRemote("Punch", target)
-                        -- Simula clique
-                        SafeCall(function()
-                            local vi = Instance.new("InputObject")
-                            vi.UserInputType = Enum.UserInputType.MouseButton1
-                            UserInputService.InputBegan:Fire(vi, false)
-                        end)
+                if tRoot and (root.Position-tRoot.Position).Magnitude <= range then
+                    if Options.KillAuraTeleport and Options.KillAuraTeleport.Value then
+                        root.CFrame = CFrame.new(tRoot.Position, root.Position)*CFrame.new(0,0,2.5)
                     end
+                    FireRemote("M1"); FireRemote("Attack",target); FireRemote("Hit",target); FireRemote("Punch",target)
+                    SafeCall(function() local vi=Instance.new("InputObject"); vi.UserInputType=Enum.UserInputType.MouseButton1; UserInputService.InputBegan:Fire(vi,false) end)
                 end
             end
         end
-
-        -- Auto Block (com debounce pelo próprio ticker)
-        if ok and Options.AutoBlock and Options.AutoBlock.Value then
-            SafeCall(function()
-                FireRemote("Block", true)
-                FireRemote("AutoBlock", true)
-                SimKey(Enum.KeyCode.F)
-            end)
-        end
-
-        -- Auto Counter
-        if ok and Options.AutoCounter and Options.AutoCounter.Value then
-            SafeCall(function()
-                FireRemote("Counter")
-                FireRemote("Parry")
-                FireRemote("CounterAttack")
-                SimKey(Enum.KeyCode.V)
-            end)
-        end
+        if ok and Options.AutoBlock and Options.AutoBlock.Value then SafeCall(function() FireRemote("Block",true); SimKey(Enum.KeyCode.F) end) end
+        if ok and Options.AutoCounter and Options.AutoCounter.Value then SafeCall(function() FireRemote("Counter"); FireRemote("Parry"); SimKey(Enum.KeyCode.V) end) end
     end
 
-    -- ─────────────────────────────────────────────────────────────
-    -- AUTO COMBO (0.15s)
+    -- Auto Combo (0.15s)
     tickers.combo += dt
-    if tickers.combo >= 0.15 then
-        tickers.combo = 0
+    if tickers.combo >= 0.15 then tickers.combo = 0
         if ok and Options.AutoCombo and Options.AutoCombo.Value then
             local nearest, dist = GetNearestEnemy()
             if nearest and dist <= (Options.KillAuraRange and Options.KillAuraRange.Value or 30) then
                 SafeCall(function()
-                    for _ = 1, 3 do
-                        local vi = Instance.new("InputObject")
-                        vi.UserInputType = Enum.UserInputType.MouseButton1
-                        UserInputService.InputBegan:Fire(vi, false)
-                    end
+                    for _ = 1, 3 do local vi=Instance.new("InputObject"); vi.UserInputType=Enum.UserInputType.MouseButton1; UserInputService.InputBegan:Fire(vi,false) end
                     FireRemote("M1", nearest)
                 end)
             end
         end
     end
 
-    -- ─────────────────────────────────────────────────────────────
-    -- ENERGY / STAMINA LOCK (0.1s)
+    -- Energy (0.1s)
     tickers.energy += dt
-    if tickers.energy >= 0.1 then
-        tickers.energy = 0
-
-        -- Infinite Energy
+    if tickers.energy >= 0.1 then tickers.energy = 0
         if ok and Options.InfEnergy and Options.InfEnergy.Value then
             SafeCall(function()
-                local candidates = {"Energy","CursedEnergy","CE","Stamina","Mana","Power","Chi"}
-                for _, name in ipairs(candidates) do
-                    local v = char:FindFirstChild(name, true) or lp:FindFirstChild(name, true)
-                    if v and (v:IsA("NumberValue") or v:IsA("IntValue")) then
-                        v.Value = v.MaxValue or 100
-                    end
-                    if char:GetAttribute(name) ~= nil then
-                        char:SetAttribute(name, 100)
-                    end
+                for _, name in ipairs({"Energy","CursedEnergy","CE","Stamina","Mana","Power","Chi"}) do
+                    local v = char:FindFirstChild(name,true) or lp:FindFirstChild(name,true)
+                    if v and (v:IsA("NumberValue") or v:IsA("IntValue")) then v.Value = v.MaxValue or 100 end
+                    if char:GetAttribute(name) ~= nil then char:SetAttribute(name,100) end
                 end
-                FireRemote("RefillEnergy"); FireRemote("SetEnergy", 100)
+                FireRemote("RefillEnergy"); FireRemote("SetEnergy",100)
             end)
         end
-
-        -- Infinite Dash
         if ok and Options.InfDash and Options.InfDash.Value then
             SafeCall(function()
-                local dashCandidates = {"DashCooldown","Dash","StaminaDash","DashStamina","DashCount"}
-                for _, name in ipairs(dashCandidates) do
-                    local v = char:FindFirstChild(name, true)
+                for _, name in ipairs({"DashCooldown","Dash","StaminaDash","DashStamina","DashCount"}) do
+                    local v = char:FindFirstChild(name,true)
                     if v and (v:IsA("NumberValue") or v:IsA("IntValue")) then v.Value = 0 end
-                    if char:GetAttribute(name) ~= nil then char:SetAttribute(name, 0) end
+                    if char:GetAttribute(name) ~= nil then char:SetAttribute(name,0) end
                 end
                 FireRemote("RefillDash")
             end)
         end
     end
 
-    -- ─────────────────────────────────────────────────────────────
-    -- NO COOLDOWN / AUTO SKILLS (0.5s)
+    -- No Cooldown / Auto Skills (0.5s)
     tickers.cooldown += dt
-    if tickers.cooldown >= 0.5 then
-        tickers.cooldown = 0
-
+    if tickers.cooldown >= 0.5 then tickers.cooldown = 0
         if ok and Options.NoCooldown and Options.NoCooldown.Value then
             SafeCall(function()
-                local cdNames = {"Cooldown","CD","SkillCooldown","AbilityCooldown","MoveCooldown"}
                 for _, obj in ipairs(char:GetDescendants()) do
-                    for _, n in ipairs(cdNames) do
-                        if obj.Name:lower():find(n:lower()) then
-                            if obj:IsA("NumberValue") or obj:IsA("IntValue") then
-                                obj.Value = 0
-                            end
-                        end
+                    for _, n in ipairs({"Cooldown","CD","SkillCooldown","AbilityCooldown","MoveCooldown"}) do
+                        if obj.Name:lower():find(n:lower()) and (obj:IsA("NumberValue") or obj:IsA("IntValue")) then obj.Value = 0 end
                     end
                 end
-                -- Itera atributos corretamente (GetAttributes retorna dicionário)
-                local attrs = char:GetAttributes()
-                for attrName, _ in pairs(attrs) do
-                    local ln = attrName:lower()
-                    if ln:find("cooldown") or ln:find("cd") then
-                        SafeCall(function() char:SetAttribute(attrName, 0) end)
+                for attrName in pairs(char:GetAttributes()) do
+                    if attrName:lower():find("cooldown") or attrName:lower():find("cd") then
+                        SafeCall(function() char:SetAttribute(attrName,0) end)
                     end
                 end
-                FireRemote("ResetCooldowns"); FireRemote("NoCooldown")
+                FireRemote("ResetCooldowns")
             end)
         end
-
         if ok and Options.AutoSkills and Options.AutoSkills.Value then
             SafeCall(function()
-                for _, k in ipairs({Enum.KeyCode.Q, Enum.KeyCode.E, Enum.KeyCode.R, Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C}) do
-                    SimKey(k)
-                end
-                for i = 1, 4 do FireRemote("UseSkill", i) end
+                for _, k in ipairs({Enum.KeyCode.Q,Enum.KeyCode.E,Enum.KeyCode.R,Enum.KeyCode.Z,Enum.KeyCode.X,Enum.KeyCode.C}) do SimKey(k) end
+                for i=1,4 do FireRemote("UseSkill",i) end
             end)
         end
-
         if ok and Options.AutoBlackFlash and Options.AutoBlackFlash.Value then
             SafeCall(function()
-                FireRemote("BlackFlash"); FireRemote("SpecialM1"); FireRemote("PoweredM1")
+                FireRemote("BlackFlash"); FireRemote("SpecialM1")
                 local target = GetNearestEnemy()
-                for _ = 1, 4 do
-                    if target then FireRemote("M1", target) end
-                end
+                for _ = 1, 4 do if target then FireRemote("M1",target) end end
             end)
         end
     end
 
-    -- ─────────────────────────────────────────────────────────────
-    -- AUTO FARM (0.3s)
+    -- Auto Farm (0.3s)
     tickers.farm += dt
-    if tickers.farm >= 0.3 then
-        tickers.farm = 0
-
+    if tickers.farm >= 0.3 then tickers.farm = 0
         if ok and Options.AutoFarm and Options.AutoFarm.Value then
             local farmRange = Options.AutoFarmRange and Options.AutoFarmRange.Value or 50
             local nearest, dist = GetNearestEnemy()
             if nearest and nearest.Character then
                 local tRoot = nearest.Character:FindFirstChild("HumanoidRootPart")
                 if tRoot then
-                    if dist > farmRange then
-                        -- Vai até o inimigo
-                        SafeCall(function()
-                            root.CFrame = CFrame.new(tRoot.Position + Vector3.new(0, 0, 3))
-                        end)
+                    if dist > farmRange then SafeCall(function() root.CFrame=CFrame.new(tRoot.Position+Vector3.new(0,0,3)) end)
                     else
-                        -- Ataca com todas as ferramentas disponíveis
                         root.CFrame = CFrame.lookAt(root.Position, tRoot.Position)
-                        FireRemote("M1", nearest)
-                        FireRemote("Attack", nearest)
-                        for i = 1, 3 do FireRemote("UseSkill", i) end
-                        SafeCall(function()
-                            local vi = Instance.new("InputObject")
-                            vi.UserInputType = Enum.UserInputType.MouseButton1
-                            UserInputService.InputBegan:Fire(vi, false)
-                        end)
+                        FireRemote("M1",nearest); FireRemote("Attack",nearest)
+                        for i=1,3 do FireRemote("UseSkill",i) end
+                        SafeCall(function() local vi=Instance.new("InputObject"); vi.UserInputType=Enum.UserInputType.MouseButton1; UserInputService.InputBegan:Fire(vi,false) end)
                     end
                 end
             end
         end
     end
 
-    -- ─────────────────────────────────────────────────────────────
-    -- ESP UPDATE (0.4s)
+    -- ESP Update (0.4s)
     tickers.espUpd += dt
-    if tickers.espUpd >= 0.4 then
-        tickers.espUpd = 0
-
-        local fillColor    = Options.ESPFillColor    and Options.ESPFillColor.Value    or Color3.fromRGB(160, 60, 255)
-        local outlineColor = Options.ESPOutlineColor and Options.ESPOutlineColor.Value or Color3.fromRGB(255, 255, 255)
+    if tickers.espUpd >= 0.4 then tickers.espUpd = 0
+        local fillColor    = Options.ESPFillColor    and Options.ESPFillColor.Value    or Color3.fromRGB(160,60,255)
+        local outlineColor = Options.ESPOutlineColor and Options.ESPOutlineColor.Value or Color3.fromRGB(255,255,255)
         local fillAlpha    = Options.ESPTransparency and Options.ESPTransparency.Value or 0.5
         local showEnergy   = Options.EnergyBarESP    and Options.EnergyBarESP.Value
         local showDist     = Options.DistanceESP     and Options.DistanceESP.Value
-
         for p, data in pairs(ESPData) do
-            -- Atualiza highlight
             if data.highlight and data.highlight.Parent then
-                data.highlight.FillColor        = fillColor
-                data.highlight.OutlineColor     = outlineColor
-                data.highlight.FillTransparency = fillAlpha
+                data.highlight.FillColor=fillColor; data.highlight.OutlineColor=outlineColor; data.highlight.FillTransparency=fillAlpha
             end
-
-            -- Energy label
             if data.energyLbl then
-                if showEnergy then
-                    local eVal = GetEnergyValue(p)
-                    data.energyLbl.Text = eVal and ("⚡ " .. math.floor(eVal.Value)) or ""
-                else
-                    data.energyLbl.Text = ""
-                end
+                local eVal = showEnergy and GetEnergyValue(p)
+                data.energyLbl.Text = eVal and ("⚡ "..math.floor(eVal.Value)) or ""
             end
-
-            -- Nome + distância
             if data.nameLbl and root and p.Character then
                 local pRoot = p.Character:FindFirstChild("HumanoidRootPart")
                 if pRoot then
-                    local dist = math.floor((root.Position - pRoot.Position).Magnitude)
-                    if showDist then
-                        data.nameLbl.Text = p.Name .. " [" .. dist .. "m]"
-                    else
-                        data.nameLbl.Text = p.Name
-                    end
+                    local dist = math.floor((root.Position-pRoot.Position).Magnitude)
+                    data.nameLbl.Text = showDist and (p.Name.." ["..dist.."m]") or p.Name
                 end
             end
         end
     end
 end)
 
--- ── Infinite Jump ─────────────────────────────────────────────────
 UserInputService.JumpRequest:Connect(function()
     if Options.InfiniteJump and Options.InfiniteJump.Value and hum then
         SafeCall(function() hum:ChangeState(Enum.HumanoidStateType.Jumping) end)
     end
 end)
 
--- ╔══════════════════════════════════════╗
--- ║ ⚙️ SETTINGS                          ║
--- ╚══════════════════════════════════════╝
+-- ╔══════════════════════════════════════════════════════════════════╗
+-- ║ ⭐ EXTRA — Kill Counter, Kill Farm, Auto Dodge, Rage Mode, etc. ║
+-- ╚══════════════════════════════════════════════════════════════════╝
+
+-- ── KILL COUNTER (ScreenGui sempre visível) ───────────────────────
+local killCount = 0
+local deathCount = 0
+
+local killGui = Instance.new("ScreenGui", lp.PlayerGui)
+killGui.Name = "JJSKillCounter"
+killGui.ResetOnSpawn = false
+killGui.Enabled = false
+
+local killFrame = Instance.new("Frame", killGui)
+killFrame.Size = UDim2.new(0, 180, 0, 70)
+killFrame.Position = UDim2.new(1, -190, 0, 10)
+killFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+killFrame.BackgroundTransparency = 0.3
+killFrame.BorderSizePixel = 0
+local killCorner = Instance.new("UICorner", killFrame)
+killCorner.CornerRadius = UDim.new(0, 8)
+
+local killLabel = Instance.new("TextLabel", killFrame)
+killLabel.Size = UDim2.new(1, 0, 0.55, 0)
+killLabel.Position = UDim2.new(0, 0, 0, 0)
+killLabel.BackgroundTransparency = 1
+killLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+killLabel.Font = Enum.Font.GothamBold
+killLabel.TextScaled = true
+killLabel.Text = "⚔ Kills: 0"
+
+local deathLabel = Instance.new("TextLabel", killFrame)
+deathLabel.Size = UDim2.new(1, 0, 0.45, 0)
+deathLabel.Position = UDim2.new(0, 0, 0.55, 0)
+deathLabel.BackgroundTransparency = 1
+deathLabel.TextColor3 = Color3.fromRGB(160, 160, 160)
+deathLabel.Font = Enum.Font.Gotham
+deathLabel.TextScaled = true
+deathLabel.Text = "💀 Deaths: 0"
+
+local function UpdateKillGui()
+    killLabel.Text  = "⚔ Kills: "   .. killCount
+    deathLabel.Text = "💀 Deaths: " .. deathCount
+end
+
+-- Detecta mortes de inimigos (HP chegou a 0)
+local function WatchEnemy(p)
+    if not p.Character then return end
+    local ph = p.Character:FindFirstChildOfClass("Humanoid")
+    if not ph then return end
+    ph.Died:Connect(function()
+        killCount += 1
+        UpdateKillGui()
+        Notify("⚔ Kill!", p.Name .. " foi eliminado! Total: " .. killCount, 3)
+    end)
+end
+
+local function WatchSelf()
+    if not hum then return end
+    hum.Died:Connect(function()
+        deathCount += 1
+        UpdateKillGui()
+    end)
+end
+
+for _, p in ipairs(Players:GetPlayers()) do
+    if p ~= lp then WatchEnemy(p) end
+end
+Players.PlayerAdded:Connect(function(p)
+    p.CharacterAdded:Connect(function() task.wait(1); WatchEnemy(p) end)
+end)
+lp.CharacterAdded:Connect(function() task.wait(1); RefreshChar(); WatchSelf() end)
+WatchSelf()
+
+-- ── EXTRA TAB — KILL COUNTER ──────────────────────────────────────
+Tabs.Extra:AddSection("⚔ Kill Counter")
+
+local KCToggle = Tabs.Extra:AddToggle("KillCounter", {
+    Title = "Mostrar Kill Counter na Tela", Default = false,
+})
+KCToggle:OnChanged(function(val)
+    killGui.Enabled = val
+    if val then Notify("Kill Counter", "Contador ativado! ✅") end
+end)
+
+Tabs.Extra:AddButton({ Title = "🔄 Resetar Contador", Callback = function()
+    killCount = 0; deathCount = 0; UpdateKillGui()
+    Notify("Kill Counter", "Contador zerado!")
+end })
+
+Tabs.Extra:AddButton({ Title = "📋 Ver Placar Final", Callback = function()
+    local kd = deathCount > 0 and string.format("%.2f", killCount/deathCount) or tostring(killCount)
+    Notify("Placar", string.format("⚔ Kills: %d\n💀 Deaths: %d\n📊 K/D: %s", killCount, deathCount, kd), 8)
+end })
+
+-- ── KILL FARM ─────────────────────────────────────────────────────
+Tabs.Extra:AddSection("🌾 Kill Farm")
+Tabs.Extra:AddParagraph("kfdesc", "Mata os inimigos em loop, respawna automaticamente e repete para farmar kills/XP.")
+
+Tabs.Extra:AddToggle("KillFarm", { Title = "Kill Farm (Loop Automático)", Default = false })
+Tabs.Extra:AddSlider("KillFarmDelay", {
+    Title = "Delay entre Kills (ms)", Min = 100, Max = 2000, Default = 500, Rounding = 0,
+})
+Tabs.Extra:AddToggle("KillFarmRespawn", {
+    Title = "Auto Respawn após Kill Farm", Default = true,
+})
+
+local killFarmTick = 0
+-- (loop no Heartbeat abaixo)
+
+-- ── AUTO DODGE ────────────────────────────────────────────────────
+Tabs.Extra:AddSection("🌀 Auto Dodge")
+Tabs.Extra:AddToggle("AutoDodge", {
+    Title = "Auto Dodge (Projéteis Próximos)",
+    Description = "Detecta partes voando em sua direção e teleporta para o lado",
+    Default = false,
+})
+Tabs.Extra:AddSlider("DodgeRadius", {
+    Title = "Raio de Detecção (studs)", Min = 5, Max = 60, Default = 20, Rounding = 0,
+})
+Tabs.Extra:AddSlider("DodgeDist", {
+    Title = "Distância do Dodge (studs)", Min = 3, Max = 25, Default = 10, Rounding = 0,
+})
+
+-- ── ANTI-KNOCKBACK ────────────────────────────────────────────────
+Tabs.Extra:AddSection("🛡 Anti-Knockback")
+Tabs.Extra:AddToggle("AntiKnockback", {
+    Title = "Anti-Knockback",
+    Description = "Trava a velocidade do HumanoidRootPart quando for atingido",
+    Default = false,
+})
+
+-- ── RAGE MODE ─────────────────────────────────────────────────────
+Tabs.Extra:AddSection("💢 Rage Mode")
+Tabs.Extra:AddParagraph("ragedesc", "Ativa todas as features ofensivas de uma vez: God Mode, Kill Aura, Auto Combo, Hitbox, Inf Energy, No Cooldown, Fly e Speed máximo.")
+
+Tabs.Extra:AddButton({ Title = "💢 ATIVAR RAGE MODE", Callback = function()
+    Options.GodMode:SetValue(true)
+    Options.KillAura:SetValue(true)
+    Options.AutoCombo:SetValue(true)
+    Options.HitboxExp:SetValue(true)
+    Options.InfEnergy:SetValue(true)
+    Options.NoCooldown:SetValue(true)
+    Options.Fly:SetValue(true)
+    Options.Speed:SetValue(300)
+    Options.KillAuraRange:SetValue(80)
+    Options.KillAuraDelay:SetValue(80)
+    if hum then hum.WalkSpeed = 300 end
+    Notify("💢 RAGE MODE", "TUDO ATIVADO! Cuidado com o ban 💀", 5)
+end })
+
+Tabs.Extra:AddButton({ Title = "😌 Desativar Tudo (Calm Down)", Callback = function()
+    Options.GodMode:SetValue(false)
+    Options.KillAura:SetValue(false)
+    Options.AutoCombo:SetValue(false)
+    Options.HitboxExp:SetValue(false)
+    Options.InfEnergy:SetValue(false)
+    Options.NoCooldown:SetValue(false)
+    Options.Fly:SetValue(false)
+    Options.Speed:SetValue(16)
+    Options.KillAuraRange:SetValue(30)
+    Options.KillAuraDelay:SetValue(200)
+    if hum then hum.WalkSpeed = 16 end
+    Notify("😌 Calm Down", "Tudo desativado. Fique tranquilo!", 4)
+end })
+
+-- ── CROSSHAIR ─────────────────────────────────────────────────────
+Tabs.Extra:AddSection("🎯 Crosshair")
+
+local crosshairGui = Instance.new("ScreenGui", lp.PlayerGui)
+crosshairGui.Name = "JJSCrosshair"
+crosshairGui.ResetOnSpawn = false
+crosshairGui.Enabled = false
+crosshairGui.IgnoreGuiInset = true
+
+local function BuildCrosshair(color, size, thickness, gap)
+    crosshairGui:ClearAllChildren()
+    local cx = UDim2.new(0.5, 0, 0.5, 0)
+    local bars = {
+        { UDim2.new(0, size, 0, thickness), UDim2.new(0.5, -(size/2+gap+size), 0.5, -thickness/2) }, -- left
+        { UDim2.new(0, size, 0, thickness), UDim2.new(0.5, gap, 0.5, -thickness/2) },                -- right
+        { UDim2.new(0, thickness, 0, size), UDim2.new(0.5, -thickness/2, 0.5, -(size/2+gap+size)) }, -- top
+        { UDim2.new(0, thickness, 0, size), UDim2.new(0.5, -thickness/2, 0.5, gap) },                -- bottom
+        { UDim2.new(0, 4, 0, 4),            UDim2.new(0.5, -2, 0.5, -2) },                          -- dot
+    }
+    for _, b in ipairs(bars) do
+        local f = Instance.new("Frame", crosshairGui)
+        f.BackgroundColor3 = color
+        f.BorderSizePixel  = 0
+        f.Size     = b[1]
+        f.Position = b[2]
+        local c = Instance.new("UICorner", f); c.CornerRadius = UDim.new(1, 0)
+    end
+end
+
+local crosshairColor = Color3.fromRGB(255, 255, 255)
+local crosshairSize  = 10
+local crosshairThick = 2
+local crosshairGap   = 4
+
+local CrosshairToggle = Tabs.Extra:AddToggle("ShowCrosshair", { Title = "Mostrar Crosshair", Default = false })
+CrosshairToggle:OnChanged(function(val)
+    crosshairGui.Enabled = val
+    if val then BuildCrosshair(crosshairColor, crosshairSize, crosshairThick, crosshairGap) end
+end)
+
+Tabs.Extra:AddColorpicker("CrosshairColor", {
+    Title = "Cor do Crosshair", Default = Color3.fromRGB(255, 255, 255),
+    Callback = function(v)
+        crosshairColor = v
+        if Options.ShowCrosshair and Options.ShowCrosshair.Value then
+            BuildCrosshair(crosshairColor, crosshairSize, crosshairThick, crosshairGap)
+        end
+    end,
+})
+
+Tabs.Extra:AddSlider("CrosshairSize", {
+    Title = "Tamanho", Min = 4, Max = 30, Default = 10, Rounding = 0,
+    Callback = function(v)
+        crosshairSize = v
+        if Options.ShowCrosshair and Options.ShowCrosshair.Value then
+            BuildCrosshair(crosshairColor, crosshairSize, crosshairThick, crosshairGap)
+        end
+    end,
+})
+
+Tabs.Extra:AddSlider("CrosshairGap", {
+    Title = "Gap (espaço central)", Min = 0, Max = 20, Default = 4, Rounding = 0,
+    Callback = function(v)
+        crosshairGap = v
+        if Options.ShowCrosshair and Options.ShowCrosshair.Value then
+            BuildCrosshair(crosshairColor, crosshairSize, crosshairThick, crosshairGap)
+        end
+    end,
+})
+
+-- ── JOIN / LEAVE NOTIFICATIONS ────────────────────────────────────
+Tabs.Extra:AddSection("🔔 Notificações de Servidor")
+
+local JoinNotifToggle = Tabs.Extra:AddToggle("JoinNotif", {
+    Title = "Notificar quando alguém Entrar/Sair",
+    Default = false,
+})
+
+Players.PlayerAdded:Connect(function(p)
+    if Options.JoinNotif and Options.JoinNotif.Value then
+        Notify("🟢 Entrou", p.Name .. " entrou no servidor!", 4)
+    end
+end)
+Players.PlayerRemoving:Connect(function(p)
+    if p == lp then return end
+    if Options.JoinNotif and Options.JoinNotif.Value then
+        Notify("🔴 Saiu", p.Name .. " saiu do servidor.", 4)
+    end
+end)
+
+-- ── BERSERKER MODE (speed boost ao tomar dano) ───────────────────
+Tabs.Extra:AddSection("🩸 Berserker")
+Tabs.Extra:AddToggle("Berserker", {
+    Title = "Berserker Mode",
+    Description = "Quanto mais baixo seu HP, mais rápido você fica (máx 2×)",
+    Default = false,
+})
+
+-- ── EXTRA RUNTIME (adiciona ao Heartbeat existente) ──────────────
+-- Este bloco é inserido no RunService.Heartbeat via task.spawn para não criar conflito
+task.spawn(function()
+    local dodgeTick    = 0
+    local kfTick       = 0
+    local berserkerTick= 0
+
+    RunService.Heartbeat:Connect(function(dt)
+        local ok = root and hum and char
+
+        -- ── Auto Dodge ─────────────────────────────────────────────
+        dodgeTick += dt
+        if dodgeTick >= 0.05 then
+            dodgeTick = 0
+            if ok and Options.AutoDodge and Options.AutoDodge.Value then
+                local radius = Options.DodgeRadius and Options.DodgeRadius.Value or 20
+                local dist   = Options.DodgeDist   and Options.DodgeDist.Value   or 10
+                SafeCall(function()
+                    for _, obj in ipairs(Workspace:GetDescendants()) do
+                        if obj:IsA("BasePart") and not obj:IsDescendantOf(char) then
+                            local vel = obj.Velocity
+                            if vel.Magnitude > 30 then -- só partes voando rápido
+                                local toRoot = (root.Position - obj.Position)
+                                local d = toRoot.Magnitude
+                                if d < radius then
+                                    -- Verifica se está vindo em nossa direção
+                                    local dot = vel.Unit:Dot(toRoot.Unit)
+                                    if dot > 0.5 then -- vindo em nossa direção
+                                        -- Dodge lateral
+                                        local side = root.CFrame.RightVector * (math.random(0,1) == 0 and dist or -dist)
+                                        root.CFrame = CFrame.new(root.Position + side)
+                                        Notify("🌀 Dodge", "Esquivou de projétil!", 1)
+                                        break
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+
+        -- ── Anti-Knockback ─────────────────────────────────────────
+        if ok and Options.AntiKnockback and Options.AntiKnockback.Value then
+            SafeCall(function()
+                if root.Velocity.Magnitude > 50 then
+                    root.Velocity = Vector3.zero
+                end
+            end)
+        end
+
+        -- ── Berserker Mode ─────────────────────────────────────────
+        berserkerTick += dt
+        if berserkerTick >= 0.5 then
+            berserkerTick = 0
+            if ok and Options.Berserker and Options.Berserker.Value then
+                SafeCall(function()
+                    local hpRatio = hum.Health / hum.MaxHealth
+                    local baseSpeed = Options.Speed and Options.Speed.Value or 16
+                    -- Quanto menor HP, maior o bônus (até 2×)
+                    local bonus = (1 - hpRatio) * baseSpeed
+                    hum.WalkSpeed = math.min(baseSpeed + bonus, baseSpeed * 2)
+                end)
+            end
+        end
+
+        -- ── Kill Farm ──────────────────────────────────────────────
+        kfTick += dt
+        local kfDelay = ((Options.KillFarmDelay and Options.KillFarmDelay.Value) or 500) / 1000
+        if kfTick >= kfDelay then
+            kfTick = 0
+            if ok and Options.KillFarm and Options.KillFarm.Value then
+                SafeCall(function()
+                    local nearest, dist = GetNearestEnemy()
+                    if nearest and nearest.Character then
+                        local tRoot = nearest.Character:FindFirstChild("HumanoidRootPart")
+                        local tHum  = nearest.Character:FindFirstChildOfClass("Humanoid")
+                        if tRoot and tHum and tHum.Health > 0 then
+                            -- Teleporta em cima
+                            root.CFrame = CFrame.new(tRoot.Position + Vector3.new(0,2,0))
+                            -- Ataca com tudo disponível
+                            FireRemote("M1", nearest); FireRemote("Attack", nearest)
+                            FireRemote("Hit", nearest); FireRemote("Punch", nearest)
+                            for i = 1, 4 do FireRemote("UseSkill", i) end
+                            for _, k in ipairs({Enum.KeyCode.Q,Enum.KeyCode.E,Enum.KeyCode.R}) do SimKey(k) end
+                            local vi = Instance.new("InputObject")
+                            vi.UserInputType = Enum.UserInputType.MouseButton1
+                            UserInputService.InputBegan:Fire(vi, false)
+                        end
+                    else
+                        -- Sem inimigos: respawna se habilitado
+                        if Options.KillFarmRespawn and Options.KillFarmRespawn.Value then
+                            if hum and hum.Health > 0 then
+                                -- Espera e tenta de novo
+                                task.wait(1)
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+end)
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
 SaveManager:IgnoreThemeSettings()
-SaveManager:SetIgnoreIndexes({})
+-- FIX: SaveManager:SetIgnoreIndexes({}) REMOVIDO — método inexistente causava erro
 InterfaceManager:SetFolder("JujutsuShenanigansHub")
 SaveManager:SetFolder("JujutsuShenanigansHub/configs")
 InterfaceManager:BuildInterfaceSection(Tabs.Settings)
@@ -1326,4 +1026,4 @@ SaveManager:BuildConfigSection(Tabs.Settings)
 Window:SelectTab(1)
 SaveManager:LoadAutoloadConfig()
 
-Notify("⛩️ JJS Hub v2.2", "Ryōiki Tenkai! Carregado com sucesso. RCtrl = minimizar.", 7)
+Notify("⛩️ JJS Hub v2.4", "Ryōiki Tenkai! v2.4 carregado. RCtrl = minimizar.", 7)
