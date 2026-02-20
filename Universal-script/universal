@@ -836,6 +836,455 @@ registerCmd("ping", {}, function()
     notify("Ping", math.floor(lp:GetNetworkPing() * 1000) .. "ms")
 end)
 
+-- ── HEAL ──────────────────────────────────────────────────────────
+registerCmd("heal", { "hp" }, function(args)
+    local h = getHum()
+    if h then
+        h.Health = tonumber(args[1]) or h.MaxHealth
+        notify("Heal", "Health → " .. math.floor(h.Health))
+    end
+end)
+
+-- ── MAX HEALTH ────────────────────────────────────────────────────
+registerCmd("maxhp", { "maxhealth" }, function(args)
+    local h = getHum()
+    if h then
+        local v = tonumber(args[1]) or 100
+        h.MaxHealth = v
+        h.Health    = v
+        notify("MaxHealth", "Set to " .. v)
+    end
+end)
+
+-- ── FREEZE / UNFREEZE ─────────────────────────────────────────────
+registerCmd("freeze", { "fz" }, function()
+    local root = getRoot()
+    if root then
+        root.Anchored = true
+        notify("Freeze", "Character frozen.")
+    end
+end)
+
+registerCmd("unfreeze", { "ufz", "thaw" }, function()
+    local c = getChar()
+    if c then
+        for _, v in pairs(c:GetDescendants()) do
+            if v:IsA("BasePart") then v.Anchored = false end
+        end
+        notify("Unfreeze", "Character unfrozen.")
+    end
+end)
+
+-- ── TRANSPARENCY / GHOST ──────────────────────────────────────────
+registerCmd("ghost", { "transparent" }, function(args)
+    local t = tonumber(args[1]) or 0.6
+    local c = getChar()
+    if c then
+        for _, v in pairs(c:GetDescendants()) do
+            if v:IsA("BasePart") and v.Name ~= "HumanoidRootPart" then
+                v.Transparency = t
+            end
+        end
+        notify("Ghost", "Transparency → " .. t)
+    end
+end)
+
+registerCmd("unghost", { "solid" }, function()
+    local c = getChar()
+    if c then
+        for _, v in pairs(c:GetDescendants()) do
+            if v:IsA("BasePart") then v.Transparency = 0 end
+        end
+        notify("Unghost", "Character solid again.")
+    end
+end)
+
+-- ── CHARACTER SIZE ────────────────────────────────────────────────
+registerCmd("size", { "scale" }, function(args)
+    local s = tonumber(args[1]) or 1
+    local c = getChar()
+    if not c then return end
+    for _, v in pairs(c:GetDescendants()) do
+        if v:IsA("BasePart") then
+            v.Size = v.Size * s
+        end
+    end
+    notify("Size", "Character scaled × " .. s .. " (rejoin to reset)")
+end)
+
+-- ── SPIN ──────────────────────────────────────────────────────────
+local spinConn
+registerCmd("spin", {}, function(args)
+    if spinConn then spinConn:Disconnect() end
+    local speed = tonumber(args[1]) or 15
+    spinConn = RunService.Heartbeat:Connect(function()
+        local root = getRoot()
+        if root then
+            root.CFrame = root.CFrame * CFrame.Angles(0, math.rad(speed), 0)
+        end
+    end)
+    notify("Spin", "Spinning at speed " .. speed .. ". Type 'unspin' to stop.")
+end)
+
+registerCmd("unspin", { "stopspin" }, function()
+    if spinConn then spinConn:Disconnect(); spinConn = nil end
+    notify("Spin", "Stopped spinning.")
+end)
+
+-- ── PLATFORM ──────────────────────────────────────────────────────
+registerCmd("platform", { "plat" }, function(args)
+    local root = getRoot()
+    if not root then return end
+    local dur = tonumber(args[1]) or 10
+    local p = Instance.new("Part", Workspace)
+    p.Size      = Vector3.new(10, 1, 10)
+    p.Anchored  = true
+    p.CFrame    = root.CFrame - Vector3.new(0, 3, 0)
+    p.BrickColor= BrickColor.new("Bright blue")
+    p.Material  = Enum.Material.Neon
+    game:GetService("Debris"):AddItem(p, dur)
+    notify("Platform", "Platform created for " .. dur .. "s.")
+end)
+
+-- ── COORDS / POSITION ─────────────────────────────────────────────
+registerCmd("pos", { "coords", "position" }, function()
+    local root = getRoot()
+    if root then
+        local p = root.Position
+        local msg = string.format("X: %.1f  Y: %.1f  Z: %.1f", p.X, p.Y, p.Z)
+        notify("Position", msg, 6)
+        copyToClipboard(msg)
+    end
+end)
+
+-- ── TELEPORT TO COORDINATES ───────────────────────────────────────
+registerCmd("tppos", { "tpcoords" }, function(args)
+    local x = tonumber(args[1]) or 0
+    local y = tonumber(args[2]) or 0
+    local z = tonumber(args[3]) or 0
+    local root = getRoot()
+    if root then
+        root.CFrame = CFrame.new(x, y, z)
+        notify("TpPos", string.format("Teleported to %.0f, %.0f, %.0f", x, y, z))
+    end
+end)
+
+-- ── DAY / NIGHT ───────────────────────────────────────────────────
+registerCmd("day", {}, function()
+    Lighting.ClockTime = 14
+    notify("Time", "Set to Day (14:00).")
+end)
+
+registerCmd("night", {}, function()
+    Lighting.ClockTime = 0
+    notify("Time", "Set to Night (00:00).")
+end)
+
+registerCmd("sunrise", {}, function()
+    Lighting.ClockTime = 6
+    notify("Time", "Set to Sunrise (06:00).")
+end)
+
+registerCmd("sunset", {}, function()
+    Lighting.ClockTime = 19
+    notify("Time", "Set to Sunset (19:00).")
+end)
+
+-- ── FOG ON / OFF ──────────────────────────────────────────────────
+registerCmd("fogoff", { "nofog" }, function()
+    Lighting.FogEnd = 100000
+    notify("Fog", "Fog disabled.")
+end)
+
+registerCmd("fogon", {}, function()
+    Lighting.FogEnd = 300
+    notify("Fog", "Fog enabled (300 studs).")
+end)
+
+-- ── GLOW ──────────────────────────────────────────────────────────
+registerCmd("glow", { "light" }, function(args)
+    local root = getRoot()
+    if not root then return end
+    local existing = root:FindFirstChild("CmdGlow")
+    if existing then existing:Destroy() end
+    local pl = Instance.new("PointLight", root)
+    pl.Name       = "CmdGlow"
+    pl.Brightness = tonumber(args[1]) or 5
+    pl.Range      = tonumber(args[2]) or 20
+    pl.Color      = Color3.new(1, 1, 1)
+    notify("Glow", "Light added. B=" .. pl.Brightness .. " R=" .. pl.Range)
+end)
+
+registerCmd("unglow", { "nolight" }, function()
+    local root = getRoot()
+    if root then
+        local l = root:FindFirstChild("CmdGlow")
+        if l then l:Destroy() end
+        notify("Glow", "Light removed.")
+    end
+end)
+
+-- ── TRAIL ─────────────────────────────────────────────────────────
+registerCmd("trail", {}, function()
+    local root = getRoot()
+    if not root then return end
+    if root:FindFirstChild("CmdTrail") then notify("Trail", "Already active!"); return end
+    local a0 = Instance.new("Attachment", root)
+    a0.Name = "CmdTrailA0"
+    a0.Position = Vector3.new(0, 1, 0)
+    local a1 = Instance.new("Attachment", root)
+    a1.Name = "CmdTrailA1"
+    a1.Position = Vector3.new(0, -1, 0)
+    local t = Instance.new("Trail", root)
+    t.Name        = "CmdTrail"
+    t.Attachment0 = a0
+    t.Attachment1 = a1
+    t.Lifetime    = 0.5
+    t.Color       = ColorSequence.new({ ColorSequenceKeypoint.new(0, Color3.fromRGB(255,100,255)), ColorSequenceKeypoint.new(1, Color3.fromRGB(100,200,255)) })
+    notify("Trail", "Trail added. Type 'notrail' to remove.")
+end)
+
+registerCmd("notrail", { "untrail" }, function()
+    local root = getRoot()
+    if not root then return end
+    for _, n in pairs({ "CmdTrail", "CmdTrailA0", "CmdTrailA1" }) do
+        local obj = root:FindFirstChild(n)
+        if obj then obj:Destroy() end
+    end
+    notify("Trail", "Trail removed.")
+end)
+
+-- ── MUSIC ─────────────────────────────────────────────────────────
+local currentSound
+registerCmd("music", { "play" }, function(args)
+    local id = tonumber(args[1])
+    if not id then notify("Usage", "music [AssetID]"); return end
+    if currentSound then currentSound:Destroy() end
+    currentSound = Instance.new("Sound", Workspace)
+    currentSound.SoundId  = "rbxassetid://" .. id
+    currentSound.Volume   = 1
+    currentSound.Looped   = true
+    currentSound:Play()
+    notify("Music", "Playing ID: " .. id)
+end)
+
+registerCmd("stopmusic", { "stopaudio", "nomusic" }, function()
+    if currentSound then
+        currentSound:Destroy()
+        currentSound = nil
+    end
+    notify("Music", "Stopped.")
+end)
+
+registerCmd("volume", { "vol" }, function(args)
+    local v = tonumber(args[1]) or 1
+    if currentSound then
+        currentSound.Volume = math.clamp(v, 0, 10)
+        notify("Volume", "Set to " .. v)
+    else
+        notify("Volume", "No music is playing.")
+    end
+end)
+
+-- ── CHAT ──────────────────────────────────────────────────────────
+registerCmd("chat", { "say" }, function(args)
+    if #args == 0 then notify("Usage", "chat [message]"); return end
+    local msg = table.concat(args, " ")
+    game:GetService("ReplicatedStorage"):FindFirstChild("DefaultChatSystemChatEvents")
+        and game:GetService("ReplicatedStorage").DefaultChatSystemChatEvents:FindFirstChild("SayMessageRequest")
+        and game:GetService("ReplicatedStorage").DefaultChatSystemChatEvents.SayMessageRequest:FireServer(msg, "All")
+    -- Fallback for newer chat
+    pcall(function()
+        game:GetService("Players").LocalPlayer:Chat(msg)
+    end)
+    notify("Chat", "Sent: " .. msg)
+end)
+
+-- ── ACCOUNT INFO ──────────────────────────────────────────────────
+registerCmd("me", { "myinfo", "whoami" }, function()
+    local info = string.format(
+        "Name: %s\nDisplay: %s\nUserID: %d\nAccount Age: %d days\nTeam: %s",
+        lp.Name,
+        lp.DisplayName,
+        lp.UserId,
+        lp.AccountAge,
+        tostring(lp.Team and lp.Team.Name or "None")
+    )
+    notify("My Info", info, 8)
+    copyToClipboard(info)
+end)
+
+-- ── TOOLS ─────────────────────────────────────────────────────────
+registerCmd("deltools", { "removetools", "cleartools" }, function()
+    local bp = lp:FindFirstChild("Backpack")
+    if bp then
+        for _, t in pairs(bp:GetChildren()) do
+            pcall(function() t:Destroy() end)
+        end
+    end
+    local c = getChar()
+    if c then
+        for _, t in pairs(c:GetChildren()) do
+            if t:IsA("Tool") then pcall(function() t:Destroy() end) end
+        end
+    end
+    notify("Tools", "All tools removed.")
+end)
+
+-- ── ANNOY (loop TP to target) ──────────────────────────────────────
+local annoyConn
+registerCmd("annoy", {}, function(args)
+    local name = args[1]
+    if not name then notify("Usage", "annoy [PlayerName]"); return end
+    local p = Players:FindFirstChild(name)
+    if not p then notify("❌ Error", "Player not found."); return end
+    if annoyConn then annoyConn:Disconnect() end
+    annoyConn = RunService.Heartbeat:Connect(function()
+        if p and p.Character then
+            local hrp  = p.Character:FindFirstChild("HumanoidRootPart")
+            local root = getRoot()
+            if hrp and root then
+                root.CFrame = hrp.CFrame
+            end
+        end
+    end)
+    notify("Annoy", "Annoying " .. name .. ". Type 'unannoy' to stop.")
+end)
+
+registerCmd("unannoy", { "stopannoy" }, function()
+    if annoyConn then annoyConn:Disconnect(); annoyConn = nil end
+    notify("Annoy", "Stopped.")
+end)
+
+-- ── ANTI-AFK TOGGLE VIA CMD ───────────────────────────────────────
+registerCmd("antiafk", { "afk" }, function()
+    local newVal = not Options.AntiAFK.Value
+    Options.AntiAFK:SetValue(newVal)
+    notify("Anti-AFK", newVal and "ON" or "OFF")
+end)
+
+-- ── NAMETAGS / AUTOFLING TOGGLE ───────────────────────────────────
+registerCmd("nametags", { "tags" }, function()
+    local newVal = not Options.NameTags.Value
+    Options.NameTags:SetValue(newVal)
+    notify("NameTags", newVal and "ON" or "OFF")
+end)
+
+registerCmd("autofling", { "af" }, function()
+    local newVal = not Options.AutoFling.Value
+    Options.AutoFling:SetValue(newVal)
+    notify("AutoFling", newVal and "ON" or "OFF")
+end)
+
+registerCmd("silentatim", { "sa", "silentaim" }, function()
+    local newVal = not Options.SilentAim.Value
+    Options.SilentAim:SetValue(newVal)
+    notify("Silent Aim", newVal and "ON" or "OFF")
+end)
+
+registerCmd("clicktp", { "ctp" }, function()
+    local newVal = not Options.ClickTP.Value
+    Options.ClickTP:SetValue(newVal)
+    notify("Click TP", newVal and "ON" or "OFF")
+end)
+
+-- ── LOOK AT ───────────────────────────────────────────────────────
+registerCmd("lookat", { "face" }, function(args)
+    local name = args[1]
+    if not name then notify("Usage", "lookat [PlayerName]"); return end
+    local p = Players:FindFirstChild(name)
+    if p and p.Character then
+        local hrp  = p.Character:FindFirstChild("HumanoidRootPart")
+        local root = getRoot()
+        if hrp and root then
+            root.CFrame = CFrame.lookAt(root.Position, hrp.Position)
+            notify("LookAt", "Facing " .. name)
+        end
+    else
+        notify("❌ Error", "Player not found.")
+    end
+end)
+
+-- ── JUMP TO KILL ──────────────────────────────────────────────────
+registerCmd("killme", { "suicide", "die" }, function()
+    local h = getHum() if h then h.Health = 0 end
+    notify("💀", "Resetting character...")
+end)
+
+-- ── SHADOW TOGGLE ─────────────────────────────────────────────────
+registerCmd("shadows", {}, function()
+    Lighting.GlobalShadows = not Lighting.GlobalShadows
+    notify("Shadows", Lighting.GlobalShadows and "ON" or "OFF")
+end)
+
+-- ── AMBIENT ───────────────────────────────────────────────────────
+registerCmd("ambient", {}, function(args)
+    local r = tonumber(args[1]) or 128
+    local g = tonumber(args[2]) or 128
+    local b = tonumber(args[3]) or 128
+    Lighting.Ambient = Color3.fromRGB(r, g, b)
+    notify("Ambient", string.format("RGB(%d, %d, %d)", r, g, b))
+end)
+
+-- ── PRINT PLAYERS LIST ────────────────────────────────────────────
+registerCmd("players", { "list" }, function()
+    local names = {}
+    for _, p in pairs(Players:GetPlayers()) do
+        table.insert(names, p.Name .. " [" .. p.UserId .. "]")
+    end
+    notify("Players (" .. #names .. ")", table.concat(names, "\n"), 10)
+end)
+
+-- ── SPECTATE ──────────────────────────────────────────────────────
+registerCmd("spectate", { "spec" }, function(args)
+    local name = args[1]
+    if not name then notify("Usage", "spectate [PlayerName]"); return end
+    local p = Players:FindFirstChild(name)
+    if p and p.Character then
+        getCam().CameraSubject = p.Character:FindFirstChildOfClass("Humanoid") or p.Character
+        notify("Spectate", "Now spectating " .. name .. ". Type 'unspec' to stop.")
+    else
+        notify("❌ Error", "Player not found.")
+    end
+end)
+
+registerCmd("unspectate", { "unspec" }, function()
+    local h = getHum()
+    if h then getCam().CameraSubject = h end
+    notify("Spectate", "Camera returned to your character.")
+end)
+
+-- ── ZOOM ──────────────────────────────────────────────────────────
+registerCmd("zoom", {}, function(args)
+    local v = tonumber(args[1]) or 10
+    lp.CameraMaxZoomDistance = v
+    lp.CameraMinZoomDistance = v
+    notify("Zoom", "Camera zoom locked at " .. v)
+end)
+
+registerCmd("unzoom", {}, function()
+    lp.CameraMaxZoomDistance = 400
+    lp.CameraMinZoomDistance = 0.5
+    notify("Zoom", "Camera zoom unlocked.")
+end)
+
+-- ── BRING PLAYER ─────────────────────────────────────────────────
+registerCmd("bring", {}, function(args)
+    local name = args[1]
+    if not name then notify("Usage", "bring [PlayerName]"); return end
+    local p = Players:FindFirstChild(name)
+    if p and p.Character then
+        local root = getRoot()
+        local hrp  = p.Character:FindFirstChild("HumanoidRootPart")
+        if root and hrp then
+            hrp.CFrame = root.CFrame + Vector3.new(2, 0, 0)
+            notify("Bring", name .. " brought to you (client-sided).")
+        end
+    else
+        notify("❌ Error", "Player not found.")
+    end
+end)
+
 -- Execute button
 Tabs.CMD:AddButton({
     Title    = "▶️ Execute Command",
@@ -855,24 +1304,79 @@ Tabs.CMD:AddButton({
 
 Tabs.CMD:AddSection("📖 Command Reference")
 Tabs.CMD:AddParagraph("cmdref",
-[[speed [n]       — Set walk speed
-jump [n]         — Set jump power
-fly              — Toggle fly
-noclip / nc      — Toggle noclip
-god / godmode    — Toggle god mode
-goto [player]    — Teleport to player
-esp              — Toggle ESP
-bright / fb      — Toggle full bright
-gravity [n]      — Set gravity (default 196)
-fov [n]          — Set field of view
-time [0-24]      — Set time of day
-rejoin / rj      — Rejoin server
-respawn / reset  — Reset character
-invisible / inv  — Toggle invisibility
-sit / unsit      — Sit or stand
-ping             — Show your ping
-serverinfo       — Show server info
-help             — List all commands]])
+[[── MOVEMENT ──────────────────────────
+speed [n]          Walk speed
+jump [n]           Jump power
+fly                Toggle fly
+noclip / nc        Toggle noclip
+infjump / ij       Toggle infinite jump
+freeze / fz        Freeze character
+unfreeze / ufz     Unfreeze character
+spin [speed]       Spin character
+unspin             Stop spin
+sit / unsit        Sit or stand
+
+── TELEPORT ───────────────────────────
+goto / tp [name]   Teleport to player
+tppos [x] [y] [z]  Teleport to coords
+pos / coords       Show & copy position
+annoy [name]       Loop TP to player
+unannoy            Stop annoy
+bring [name]       Bring player to you
+lookat [name]      Face a player
+spectate [name]    Spectate player
+unspec / unspectate  Return camera
+
+── COMBAT / SURVIVAL ──────────────────
+god / godmode      Toggle god mode
+heal [n]           Restore HP
+maxhp [n]          Set max health
+killme / die       Reset character
+invisible / inv    Toggle invisibility
+ghost [0-1]        Make transparent
+unghost / solid    Remove transparency
+autofling / af     Toggle auto fling
+silentatim / sa    Toggle silent aim
+
+── VISUALS ────────────────────────────
+esp                Toggle ESP
+bright / fb        Full bright
+fov [n]            Field of view
+time [0-24]        Time of day
+day / night        Quick time presets
+sunrise / sunset   More time presets
+shadows            Toggle shadows
+fogoff / fogon     Toggle fog
+ambient [r] [g] [b] Set ambient color
+glow [b] [r]       Add point light
+unglow             Remove light
+trail              Add color trail
+notrail            Remove trail
+
+── WORLD ──────────────────────────────
+gravity / grav [n]  Set gravity
+platform [secs]    Create platform under you
+size [n]           Scale character (×n)
+deltools           Remove all tools
+zoom [n]           Lock camera zoom
+unzoom             Unlock camera zoom
+
+── AUDIO ──────────────────────────────
+music [id]         Play sound by ID
+stopmusic          Stop music
+volume [n]         Set music volume
+
+── SERVER / INFO ──────────────────────
+serverinfo / info  Server info
+ping               Your ping
+me / whoami        Your account info
+players / list     List all players
+chat / say [msg]   Send chat message
+nametags / tags    Toggle name tags
+antiafk / afk      Toggle anti-AFK
+clicktp / ctp      Toggle click teleport
+rejoin / rj        Rejoin server
+help               List all commands]])
 
 -- ================================================================
 -- ⚙️ SETTINGS
@@ -890,8 +1394,10 @@ SaveManager:BuildConfigSection(Tabs.Settings)
 -- ================================================================
 Window:SelectTab(1)
 
+local cmdCount = 0
+for _ in pairs(Commands) do cmdCount += 1 end
 notify(
-    "🌌 UNIVERSAL NamelessHub v1.1 (Fixed)",
-    "Loaded! Press RCtrl to minimize.\nTry the Commands tab or type 'help'.",
+    "🌌 UNIVERSAL NamelessHub v1.2",
+    "Loaded! " .. cmdCount .. " commands available.\nPress RCtrl to minimize. Type 'help' no CMD tab.",
     7
 )
