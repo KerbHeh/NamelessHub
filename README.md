@@ -1,8 +1,7 @@
 
-## Welcome to Nameless Hub (sorry for the lack of creativity xP)
+## Welcome to Nameless Hub
+![Logo](https://raw.githubusercontent.com/KerbHeh/NamelessHub/blob/main/Logo.png) (sorry for the lack of creativity xP)    
 so.. huhh it's the only thing I can say after all.... XDDD
-
-
 
 I hope you have fun ! :)
 
@@ -23,3 +22,10 @@ I hope you have fun ! :)
 
 > [!WARNING]
 > Cuse on secondary accounts. this way, you won't risk getting banned
+
+# Título 1 (maior)
+## Título 2
+### Título 3
+#### Título 4
+##### Título 5
+###### Título 6 (menor)
