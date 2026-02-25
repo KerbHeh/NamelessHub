@@ -1,3 +1,7 @@
+**Keyless • Atualizado 25/02/2026**
+```lua
+getgenv().HubName = "Nameless"
+loadstring(game:HttpGet("https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/loader.lua"))()
 ## Welcome to Nameless Hub (sorry for the lack of creativity xP)
 so.. huhh it's the only thing I can say after all.... XDDD
 
