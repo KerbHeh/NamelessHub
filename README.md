@@ -11,3 +11,18 @@ I hope you have fun ! :)
 
 
 [click here](https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Get/script/file) to get script
+
+> [!NOTE]
+> Informação importante.
+
+> [!TIP]
+> Dica útil.
+
+> [!IMPORTANT]
+> Preste atenção!
+
+> [!WARNING]
+> Cuidado aqui.
+
+> [!CAUTION]
+> Perigo!
