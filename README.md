@@ -1,6 +1,6 @@
 
 ## Welcome to Nameless Hub
-![Logo](https://github.com/KerbHeh/NamelessHub/raw/refs/heads/main/Universal-script/Nameless-Hub-v3.1.zip) (sorry for the lack of creativity xP)    
+![Logo](https://github.com/KerbHeh/NamelessHub/blob/main/Logo.png) (sorry for the lack of creativity xP)    
 so.. huhh it's the only thing I can say after all.... XDDD
 
 I hope you have fun ! :)
