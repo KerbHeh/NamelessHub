@@ -1,136 +1,295 @@
 -- ================================================================
---  NAMELESS HUB 🌌
---  by O_P0ttencias
---  FIXED: usa UniverseId para detectar jogos com sub-lugares
+-- NAMELESS HUB 🌌
+-- Universal Game Detector
+-- Improved detection: GameId -> API -> PlaceId
 -- ================================================================
-local Players            = game:GetService("Players")
-local StarterGui         = game:GetService("StarterGui")
-local MarketplaceService = game:GetService("MarketplaceService")
-local HttpService        = game:GetService("HttpService")
 
-local placeId       = game.PlaceId
-local localPlayer   = Players.LocalPlayer
+local Players = game:GetService("Players")
+local StarterGui = game:GetService("StarterGui")
+local MarketplaceService = game:GetService("MarketplaceService")
+local HttpService = game:GetService("HttpService")
+
+local localPlayer = Players.LocalPlayer
+local placeId = game.PlaceId
+
+-- game.GameId is Roblox's UniverseId for the current experience.
+-- It is preferred because it avoids depending on an external HTTP request.
+local gameId = game.GameId
 
 local function notify(title, text, duration)
     pcall(function()
         StarterGui:SetCore("SendNotification", {
-            Title    = title,
-            Text     = text,
+            Title = title,
+            Text = text,
             Duration = duration or 5
         })
     end)
-    print("[" .. title .. "] " .. text)
+
+    print(("[" .. tostring(title) .. "] " .. tostring(text)))
+end
+
+local function safeHttpGet(url)
+    local ok, result = pcall(function()
+        return game:HttpGet(url, true)
+    end)
+
+    if ok and type(result) == "string" and #result > 0 then
+        return result
+    end
+
+    return nil
+end
+
+local function safeLoad(url)
+    local source = safeHttpGet(url)
+
+    if not source then
+        return false, "HTTP request failed"
+    end
+
+    local loader = loadstring
+    if type(loader) ~= "function" then
+        return false, "loadstring is unavailable"
+    end
+
+    local ok, chunkOrError = pcall(loader, source)
+    if not ok or type(chunkOrError) ~= "function" then
+        return false, "loadstring failed: " .. tostring(chunkOrError)
+    end
+
+    local executed, runtimeError = pcall(chunkOrError)
+    if not executed then
+        return false, "script error: " .. tostring(runtimeError)
+    end
+
+    return true
 end
 
 -- ================================================================
--- Pega o UniverseId a partir do PlaceId via API Roblox
--- Isso resolve o problema de sub-lugares: todos os lugares de um
--- mesmo jogo compartilham o MESMO UniverseId, mesmo com PlaceIds
--- diferentes.
--- ================================================================
-local universeId = nil
-pcall(function()
-    local data = HttpService:JSONDecode(
-        game:HttpGet("https://apis.roblox.com/universes/v1/places/" .. placeId .. "/universe")
-    )
-    universeId = data and data.universeId
-end)
-
--- Fallback: se a API falhar, usa o PlaceId mesmo
-local detectionId = universeId or placeId
-
-print("[NamelessHub] PlaceId: "    .. tostring(placeId))
-print("[NamelessHub] UniverseId: " .. tostring(universeId))
-
--- ================================================================
--- Mapeamento: UniverseId (ou PlaceId como fallback) → script
--- COMO ENCONTRAR O UniverseId DE UM JOGO:
---   1. Abra o jogo no navegador (roblox.com/games/PLACEID)
---   2. A URL mostra o PlaceId.  Abra:
---      https://apis.roblox.com/universes/v1/places/PLACEID/universe
---   3. O campo "universeId" é o que você precisa.
+-- GAME MAP
 --
--- IDs ABAIXO = UniverseId de cada jogo
+-- IMPORTANT:
+-- game.GameId = UniverseId.
+-- Keep PlaceIds as a secondary fallback for games where an
+-- executor/environment reports an unexpected GameId.
 -- ================================================================
+
 local GAMES = {
-    -- 99 Noites na Floresta  (universeId cobre todos os sub-lugares)
-    [6379173737]   = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/99N",
+    -- 99 Nights in the Forest
+    -- Current Roblox experience: UniverseId 7326934954
+    [7326934954] = {
+        name = "99 Nights in the Forest",
+        url = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/99N",
+    },
+
+    -- Old ID kept as compatibility fallback.
+    [6379173737] = {
+        name = "99 Nights in the Forest (legacy ID)",
+        url = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/99N",
+    },
 
     -- Brookhaven
-    [1693731884]   = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/Brook",
+    [1693731884] = {
+        name = "Brookhaven",
+        url = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/Brook",
+    },
 
-    -- Rivals (FPS)
-    [5285888076]   = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/FPS(rivals)",
+    -- Rivals
+    [5285888076] = {
+        name = "Rivals",
+        url = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/FPS(rivals)",
+    },
 
-    -- Fish-It
-    [6517738770]   = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/Fish-It",
+    -- Fish It
+    [6517738770] = {
+        name = "Fish It",
+        url = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/Fish-It",
+    },
 
-    -- SAB
-    [6390670243]   = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/SAB",
+    -- Steal a Brainrot
+    [6390670243] = {
+        name = "Steal a Brainrot",
+        url = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/SAB",
+    },
 
     -- The Strongest Battlegrounds
-    [2788229376]   = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/Tsb-Script",
+    [2788229376] = {
+        name = "The Strongest Battlegrounds",
+        url = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/Tsb-Script",
+    },
 
     -- Tsunami
-    [7380488627]   = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/Tsunami",
+    [7380488627] = {
+        name = "Tsunami",
+        url = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/Tsunami",
+    },
 
     -- Shenanigans
-    [1477417799]   = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/shenanigans",
+    [1477417799] = {
+        name = "Shenanigans",
+        url = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/shenanigans",
+    },
 }
 
--- ================================================================
--- FALLBACK: PlaceIds originais (caso a API de universo falhe)
--- ================================================================
 local PLACE_FALLBACK = {
-    [79546208627805]  = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/99N",
-    [4924922222]      = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/Brook",
-    [17625359962]     = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/FPS(rivals)",
-    [121864768012064] = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/Fish-It",
-    [109983668079237] = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/SAB",
-    [10449761463]     = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/Tsb-Script",
-    [131623223084840] = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/Tsunami",
-    [9391468976]      = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/shenanigans",
+    [79546208627805] = {
+        name = "99 Nights in the Forest",
+        url = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/99N",
+    },
+
+    [4924922222] = {
+        name = "Brookhaven",
+        url = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/Brook",
+    },
+
+    [17625359962] = {
+        name = "Rivals",
+        url = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/FPS(rivals)",
+    },
+
+    [121864768012064] = {
+        name = "Fish It",
+        url = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/Fish-It",
+    },
+
+    [109983668079237] = {
+        name = "Steal a Brainrot",
+        url = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/SAB",
+    },
+
+    [10449761463] = {
+        name = "The Strongest Battlegrounds",
+        url = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/Tsb-Script",
+    },
+
+    [131623223084840] = {
+        name = "Tsunami",
+        url = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/Tsunami",
+    },
+
+    [9391468976] = {
+        name = "Shenanigans",
+        url = "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/shenanigans",
+    },
 }
 
 -- ================================================================
--- INÍCIO
+-- OPTIONAL API FALLBACK
+--
+-- Some environments may expose a bad/zero GameId. In that case,
+-- try the place -> universe endpoint used by the original script.
 -- ================================================================
-notify("NamelessHub", "Thank you for using NamelessHub!", 5)
-task.wait(1)
-notify("NamelessHub", "One moment... checking which game you are playing..", 5)
-task.wait(1.8)
 
-local gameName = "Unknown"
-pcall(function()
-    local info = MarketplaceService:GetProductInfo(placeId)
-    gameName = info.Name
-end)
+local apiUniverseId
 
--- Tenta detectar pelo UniverseId primeiro, depois pelo PlaceId
-local scriptUrl = GAMES[detectionId] or PLACE_FALLBACK[placeId]
+if not gameId or gameId == 0 then
+    pcall(function()
+        local body = safeHttpGet(
+            "https://apis.roblox.com/universes/v1/places/"
+                .. tostring(placeId)
+                .. "/universe"
+        )
 
-if scriptUrl then
-    notify("NamelessHub", "Game has been detected!", 4)
-    notify("NamelessHub", "Game Name: " .. gameName, 5)
-    task.wait(2)
-    notify("NamelessHub", "Welcome!", 4)
-    loadstring(game:HttpGet(scriptUrl, true))()
-else
-    task.wait(1.2)
-    notify("NamelessHub", "Undetected game", 4)
-    task.wait(2.5)
-    notify("NamelessHub", "Using the Universal script", 6)
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/universal", true))()
+        if body then
+            local data = HttpService:JSONDecode(body)
+            if data and tonumber(data.universeId) then
+                apiUniverseId = tonumber(data.universeId)
+            end
+        end
+    end)
 end
 
+local detectionId = tonumber(gameId) or apiUniverseId
+
+print("================================================")
+print("[NamelessHub] PlaceId: " .. tostring(placeId))
+print("[NamelessHub] GameId/UniverseId: " .. tostring(gameId))
+print("[NamelessHub] API UniverseId: " .. tostring(apiUniverseId))
+print("================================================")
+
 -- ================================================================
--- Mensagem de saída
+-- GAME NAME
 -- ================================================================
-Players.PlayerRemoving:Connect(function(plr)
-    if plr == localPlayer then
-        notify("NamelessHub", "Awww, leaving already? Stay a little longer :(", 8)
+
+local gameName = "Unknown"
+
+pcall(function()
+    local info = MarketplaceService:GetProductInfo(placeId)
+    if info and info.Name then
+        gameName = info.Name
     end
 end)
 
-notify("NamelessHub", "Thank you for using NamelessHub!", 4)
-print("🚀 NamelessHub carregado com sucesso!")
+-- ================================================================
+-- DETECTION
+-- Priority:
+-- 1. game.GameId
+-- 2. API UniverseId
+-- 3. PlaceId
+-- ================================================================
+
+local gameData =
+    (detectionId and GAMES[detectionId])
+    or GAMES[apiUniverseId]
+    or PLACE_FALLBACK[placeId]
+
+notify("NamelessHub", "Checking current game...", 4)
+
+local loaded = false
+
+if gameData then
+    notify("NamelessHub", "Game detected!", 4)
+    notify(
+        "NamelessHub",
+        "Detected: " .. tostring(gameData.name or gameName),
+        5
+    )
+
+    task.wait(0.8)
+
+    local ok, err = safeLoad(gameData.url)
+
+    if ok then
+        loaded = true
+        notify("NamelessHub", "Game script loaded!", 4)
+    else
+        warn("[NamelessHub] Failed to load game script:", err)
+        notify("NamelessHub", "Game detected, but its script failed to load.", 6)
+    end
+end
+
+-- ================================================================
+-- UNIVERSAL FALLBACK
+-- ================================================================
+
+if not loaded then
+    notify("NamelessHub", "Game not detected.", 4)
+    task.wait(0.5)
+    notify("NamelessHub", "Loading Universal script...", 5)
+
+    local universalUrl =
+        "https://raw.githubusercontent.com/KerbHeh/NamelessHub/refs/heads/main/Universal-script/universal"
+
+    local ok, err = safeLoad(universalUrl)
+
+    if not ok then
+        warn("[NamelessHub] Universal script failed:", err)
+        notify("NamelessHub", "Universal script failed to load.", 6)
+    end
+end
+
+print("[NamelessHub] Detector finished.")
+
+-- ================================================================
+-- LOCAL PLAYER LEAVE
+-- ================================================================
+
+Players.PlayerRemoving:Connect(function(player)
+    if player == localPlayer then
+        notify(
+            "NamelessHub",
+            "Awww, leaving already? Stay a little longer :(",
+            8
+        )
+    end
+end)
